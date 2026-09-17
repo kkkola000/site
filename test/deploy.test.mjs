@@ -61,3 +61,62 @@ test('справка и разбор аргументов работают бе�
     /неизвестный аргумент/,
   );
 });
+
+// --- Соседство с панелью Ozon Pack на том же сервере ---
+
+test('список сетей VPN берётся из IP_ALLOWLIST соседней панели', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ozon-'));
+  writeFileSync(join(dir, '.env'), 'PORT=8080\nIP_ALLOWLIST=10.8.0.0/24,192.168.10.0/24\n');
+
+  const list = runBash(`OZON_DIR="${dir}"; neighbour_allowlist`).trim();
+  assert.equal(list, '10.8.0.0/24,192.168.10.0/24');
+});
+
+test('если IP_ALLOWLIST нет, сети читаются из снипета nginx соседа', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ozon-'));
+  const snippet = join(dir, 'ozon-pack-access.conf');
+  writeFileSync(join(dir, '.env'), 'PORT=8080\n');
+  writeFileSync(snippet, 'allow 127.0.0.1;\nallow ::1;\nallow 10.8.0.0/24;\ndeny all;\n');
+
+  const list = runBash(`OZON_DIR="${dir}"; OZON_SNIPPET="${snippet}"; neighbour_allowlist`).trim();
+  assert.equal(list, '10.8.0.0/24');
+});
+
+test('порт соседа читается из его .env, а не берётся жёстко', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ozon-'));
+  writeFileSync(join(dir, '.env'), 'PORT=8090\n');
+  assert.equal(runBash(`OZON_DIR="${dir}"; neighbour_port`).trim(), '8090');
+  // Без .env остаётся значение по умолчанию.
+  assert.equal(runBash(`OZON_DIR="${dir}/нет"; neighbour_port`).trim(), '8080');
+});
+
+test('снипет доступа закрывает всё, кроме localhost и заданных сетей', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'snippet-'));
+  const file = join(dir, 'access.conf');
+
+  runBash(`ACCESS_SNIPPET="${file}"; ALLOW_SUBNETS="10.8.0.0/24,172.16.5.0/24"; write_access_snippet`);
+  const conf = readFileSync(file, 'utf8');
+
+  assert.match(conf, /^allow 127\.0\.0\.1;$/m);
+  assert.match(conf, /^allow 10\.8\.0\.0\/24;$/m);
+  assert.match(conf, /^allow 172\.16\.5\.0\/24;$/m);
+  assert.match(conf, /^deny all;$/m);
+  assert.ok(!/^allow all;$/m.test(conf));
+});
+
+test('без известных сетей снипет не притворяется закрытым', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'snippet-'));
+  const file = join(dir, 'access.conf');
+
+  runBash(`ACCESS_SNIPPET="${file}"; ALLOW_SUBNETS=""; OZON_DIR="${dir}/нет"; OZON_SNIPPET="${dir}/нет"; write_access_snippet`);
+  const conf = readFileSync(file, 'utf8');
+
+  assert.match(conf, /^allow all;$/m);
+  assert.ok(!/^deny all;$/m.test(conf));
+});
+
+test('шаблон сайта nginx подключает файл правил доступа', () => {
+  const template = readFileSync(resolve(import.meta.dirname, '../deploy/nginx.conf'), 'utf8');
+  assert.match(template, /include __ACCESS_SNIPPET__;/);
+  assert.match(template, /proxy_pass http:\/\/127\.0\.0\.1:__PORT__;/);
+});

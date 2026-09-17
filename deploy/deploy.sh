@@ -10,6 +10,12 @@
 set -euo pipefail
 
 SERVICE="anex-orders"
+# Соседняя панель на этом же сервере: Ozon Pack (/opt/ozon-pack, порт 8080,
+# служба ozon-pack, доступ ограничен подсетью VPN). Её файлы мы не трогаем.
+OZON_DIR="/opt/ozon-pack"
+OZON_SNIPPET="/etc/nginx/snippets/ozon-pack-access.conf"
+ACCESS_SNIPPET="/etc/nginx/snippets/anex-orders-access.conf"
+ALLOW_SUBNETS=""
 DIR="/opt/anex-orders"
 RUN_USER="anexorders"
 PORT="3010"
@@ -49,6 +55,9 @@ usage() {
   --user <имя>          Системный пользователь сервиса (по умолчанию ${RUN_USER}).
   --auth-user <имя>     Логин для входа в панель (по умолчанию ${AUTH_USER}).
   --auth-password <..>  Пароль панели. Если не задан — будет сгенерирован.
+  --allow-subnet <сеть> Кому открыт доступ через nginx, например 10.8.0.0/24.
+                        Можно указать несколько раз. Если не задано — берётся
+                        список из соседней панели Ozon Pack (VPN-подсеть).
 
 nginx на сервере уже настроен, поэтому по умолчанию скрипт его НЕ меняет:
 в конце печатается готовый блок конфигурации для вставки вручную.
@@ -74,6 +83,7 @@ while [[ $# -gt 0 ]]; do
     --user) RUN_USER="${2:-}"; shift 2 ;;
     --auth-user) AUTH_USER="${2:-}"; shift 2 ;;
     --auth-password) AUTH_PASSWORD="${2:-}"; shift 2 ;;
+    --allow-subnet) ALLOW_SUBNETS="${ALLOW_SUBNETS:+$ALLOW_SUBNETS,}${2:-}"; shift 2 ;;
     --ssl) WITH_SSL=1; shift ;;
     --ssl-email) SSL_EMAIL="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -96,6 +106,61 @@ if [[ "${DEPLOY_LIB_ONLY:-0}" != "1" ]]; then
     fi
   fi
 fi
+
+# ---------- 0. Соседняя панель Ozon Pack ----------
+# Ozon Pack держит свой каталог, службу, порт и сайт nginx. Задача — убедиться,
+# что мы ничего из этого не занимаем и не переписываем.
+neighbour_port() {
+  local port=""
+  [[ -f "$OZON_DIR/.env" ]] && port="$(read_env "$OZON_DIR/.env" PORT)"
+  echo "${port:-8080}"
+}
+
+# Список разрешённых сетей соседа: сначала IP_ALLOWLIST из .env, иначе
+# разбираем директивы allow в его снипете nginx.
+neighbour_allowlist() {
+  local list=""
+  [[ -f "$OZON_DIR/.env" ]] && list="$(read_env "$OZON_DIR/.env" IP_ALLOWLIST)"
+  if [[ -z "$list" && -f "$OZON_SNIPPET" ]]; then
+    # localhost и all в список сетей не берём: он нужен для сообщения
+    # оператору и для сравнения, а свои allow мы всё равно пишем сами.
+    list="$(awk '/^[[:space:]]*allow[[:space:]]/ {
+        gsub(/;/, "", $2)
+        if ($2 == "all" || $2 == "127.0.0.1" || $2 == "::1") next
+        printf "%s%s", (n++ ? "," : ""), $2
+      }' "$OZON_SNIPPET")"
+  fi
+  echo "$list"
+}
+
+check_neighbour() {
+  [[ -d "$OZON_DIR" ]] || systemctl list-unit-files 2>/dev/null | grep -q '^ozon-pack\.service' || return 0
+
+  local oport; oport="$(neighbour_port)"
+  log "Рядом работает панель Ozon Pack"
+  ok "каталог ${OZON_DIR}, служба ozon-pack, порт ${oport}"
+
+  [[ "$PORT" == "$oport" ]] && die "порт ${PORT} занят панелью Ozon Pack — выберите другой: --port 3010"
+  [[ "$DIR" == "$OZON_DIR" ]] && die "каталог ${DIR} принадлежит Ozon Pack — укажите другой: --dir /opt/anex-orders"
+  [[ "$SERVICE" == "ozon-pack" ]] && die "имя службы совпадает с Ozon Pack"
+  [[ "$RUN_USER" == "ozon" ]] && die "пользователь ozon принадлежит Ozon Pack — укажите другой: --user anexorders"
+
+  # Его сайт nginx пересоздаётся его же скриптом ssl.sh целиком, поэтому
+  # наши правки в этом файле пропадут при следующем запуске их установки.
+  local their_site
+  their_site="$(grep -rlsE "proxy_pass http://127\.0\.0\.1:${oport}" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null | head -1 || true)"
+  if [[ -n "$their_site" ]]; then
+    ok "сайт nginx соседа: ${their_site} (не трогаем)"
+    if [[ -n "$DOMAIN" ]] && grep -qsE "server_name[^;]*\b${DOMAIN}\b" "$their_site"; then
+      die "домен ${DOMAIN} обслуживает Ozon Pack; его конфиг перезаписывается скриптом ssl.sh — возьмите отдельный поддомен"
+    fi
+  fi
+
+  if [[ $WITH_SSL -eq 1 ]] && systemctl list-unit-files 2>/dev/null | grep -q '^certbot-renew\.timer'; then
+    warn "у Ozon Pack уже настроено продление сертификатов (certbot-renew.timer)"
+    warn "при доступе по VPN сертификат Let's Encrypt не нужен — рассмотрите запуск без --ssl"
+  fi
+}
 
 # ---------- 1. Node.js ----------
 install_node() {
@@ -207,6 +272,38 @@ install_service() {
 }
 
 # ---------- 5. nginx ----------
+# Свой файл правил доступа: снипет соседа принадлежит его скриптам,
+# поэтому копируем из него только список сетей.
+write_access_snippet() {
+  local list="$ALLOW_SUBNETS"
+  [[ -n "$list" ]] || list="$(neighbour_allowlist)"
+
+  mkdir -p "$(dirname "$ACCESS_SNIPPET")"
+  {
+    echo "# Кто может открывать панель заказов. Создано deploy/deploy.sh."
+    echo "allow 127.0.0.1;"
+    echo "allow ::1;"
+    if [[ -n "$list" ]]; then
+      printf '%s\n' "$list" | tr ',' '\n' | while read -r net; do
+        net="$(printf '%s' "$net" | tr -d ' ')"
+        case "$net" in ""|127.0.0.1|::1|all) continue ;; esac
+        echo "allow $net;"
+      done
+      echo "deny all;"
+    else
+      echo "# Список сетей не задан — вход ограничен только паролем панели."
+      echo "# Ограничить доступ сетью VPN: --allow-subnet 10.8.0.0/24"
+      echo "allow all;"
+    fi
+  } > "$ACCESS_SNIPPET"
+
+  if [[ -n "$list" ]]; then
+    ok "доступ разрешён сетям: ${list}"
+  else
+    warn "сети VPN не найдены — сайт открыт всем, кто дойдёт до nginx (пароль панели остаётся)"
+  fi
+}
+
 install_nginx() {
   if [[ $WITH_NGINX -ne 1 ]]; then
     warn "nginx не настраивается (на сервере уже есть своя конфигурация) — блок для вставки будет ниже"
@@ -221,7 +318,9 @@ install_nginx() {
     die "домен ${DOMAIN} уже используется другим сайтом nginx — вставьте блок вручную (печатается ниже)"
   fi
 
+  write_access_snippet
   sed -e "s|__DOMAIN__|${DOMAIN}|g" -e "s|__PORT__|${PORT}|g" -e "s|__SERVICE__|${SERVICE}|g" \
+      -e "s|__ACCESS_SNIPPET__|${ACCESS_SNIPPET}|g" \
     "$DIR/deploy/nginx.conf" > "$site"
   ln -sf "$site" "/etc/nginx/sites-enabled/${SERVICE}"
   # Чужие сайты (включая default) не трогаем — на сервере работает другая панель.
@@ -245,9 +344,14 @@ print_nginx_snippet() {
   log "Как опубликовать панель через уже настроенный nginx"
   if [[ -n "$BASE_PATH" ]]; then
     cat <<SNIPPET
-  В существующий server{} (например, сайт seller.anex-online.kz) добавьте:
+  ВАЖНО: не добавляйте этот блок в сайт панели Ozon Pack — его конфиг
+  пересоздаётся скриптом deploy/ssl.sh, и правка пропадёт. Используйте
+  отдельный сайт nginx (свой поддомен) либо сайт, который вы ведёте сами.
+
+  В такой server{} добавьте:
 
     location ${BASE_PATH}/ {
+        include ${ACCESS_SNIPPET};   # те же сети VPN, что и у Ozon Pack
         proxy_pass http://127.0.0.1:${PORT}${BASE_PATH}/;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
@@ -292,6 +396,7 @@ health_check() {
 
 if [[ "${DEPLOY_LIB_ONLY:-0}" == "1" ]]; then return 0 2>/dev/null || exit 0; fi
 
+check_neighbour
 install_node
 install_files
 write_env
