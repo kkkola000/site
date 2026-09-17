@@ -272,3 +272,70 @@ test('если подходящего блока нет, вставка не в�
   assert.ok(!out.includes('anex-orders'), 'чужой конфиг не должен меняться');
   assert.equal(out, SITE_SAMPLE);
 });
+
+// --- Поиск сайта в конфигурации nginx ---
+
+const NGINX_T_OUTPUT = `# configuration file /etc/nginx/nginx.conf:
+http {
+    include /etc/nginx/sites-enabled/*;
+}
+
+# configuration file /etc/nginx/sites-enabled/ozon-pack:
+server {
+    server_name seller.anex-online.kz;
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+    }
+}
+
+# configuration file /etc/nginx/plesk.conf.d/vhosts/shop.anex-online.kz.conf:
+server {
+    server_name shop.anex-online.kz www.shop.anex-online.kz;
+    location / {
+        proxy_pass http://127.0.0.1:7080;
+    }
+}
+`;
+
+// Подменяем nginx на заглушку, которая печатает готовый дамп конфигурации.
+function withFakeNginx(snippet) {
+  const dir = mkdtempSync(join(tmpdir(), 'bin-'));
+  const dump = join(dir, 'dump.txt');
+  writeFileSync(dump, NGINX_T_OUTPUT);
+  writeFileSync(join(dir, 'nginx'), `#!/usr/bin/env bash\n[ "$1" = "-T" ] && cat "${dump}"\nexit 0\n`);
+  execFileSync('chmod', ['+x', join(dir, 'nginx')]);
+  return runBash(`export PATH="${dir}:$PATH"\n${snippet}`);
+}
+
+test('сайт находится по домену', () => {
+  const out = withFakeNginx('resolve_site_file "" seller.anex-online.kz 8080');
+  assert.equal(out.trim(), '/etc/nginx/sites-enabled/ozon-pack');
+});
+
+test('сайт находится по порту соседней панели, если домен не задан', () => {
+  assert.equal(withFakeNginx('resolve_site_file "" "" 8080').trim(), '/etc/nginx/sites-enabled/ozon-pack');
+  assert.equal(
+    withFakeNginx('resolve_site_file "" "" 7080').trim(),
+    '/etc/nginx/plesk.conf.d/vhosts/shop.anex-online.kz.conf',
+  );
+});
+
+test('домен с несколькими именами в server_name тоже находится', () => {
+  const out = withFakeNginx('resolve_site_file "" www.shop.anex-online.kz 9999');
+  assert.equal(out.trim(), '/etc/nginx/plesk.conf.d/vhosts/shop.anex-online.kz.conf');
+});
+
+test('когда сайт не найден, возвращается ошибка, а не случайный путь', () => {
+  // Раньше пустой результат превращался в текущий каталог (/root).
+  assert.throws(
+    () => withFakeNginx('cd /root 2>/dev/null || cd /; resolve_site_file "" нет-такого.example 9999 || exit 3'),
+    /Command failed/,
+  );
+  const listing = withFakeNginx('list_sites');
+  assert.match(listing, /seller\.anex-online\.kz/);
+  assert.match(listing, /\/etc\/nginx\/sites-enabled\/ozon-pack/);
+});
+
+test('явно указанный несуществующий файл отвергается', () => {
+  assert.throws(() => withFakeNginx('resolve_site_file /нет/такого.conf "" 8080'), /файл сайта не найден/);
+});

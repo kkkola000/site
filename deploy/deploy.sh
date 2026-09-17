@@ -68,6 +68,7 @@ usage() {
                         откроется по адресу этого сайта + --base-path.
                         Вместо auto можно указать путь к файлу конфигурации.
   --detach-site         Убрать ранее добавленный путь из сайта nginx.
+  --list-sites          Показать сайты nginx на сервере и выйти.
 
 nginx на сервере уже настроен, поэтому по умолчанию скрипт его НЕ меняет:
 в конце печатается готовый блок конфигурации для вставки вручную.
@@ -97,6 +98,7 @@ while [[ $# -gt 0 ]]; do
     --bind) BIND_HOST="${2:-}"; shift 2 ;;
     --attach-site) ATTACH_SITE="${2:-auto}"; shift 2 ;;
     --detach-site) DETACH_SITE=1; shift ;;
+    --list-sites) LIST_SITES=1; shift ;;
     --ssl) WITH_SSL=1; shift ;;
     --ssl-email) SSL_EMAIL="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -424,53 +426,146 @@ insert_block() {
   ' "$file"
 }
 
+# Карта конфигурации nginx: какой файл какой server_name обслуживает и куда
+# проксирует. Берём из nginx -T — это действующая конфигурация со всеми include,
+# включая Plesk и прочие нестандартные размещения.
+nginx_map() {
+  nginx -T 2>/dev/null | awk '
+    /^# configuration file / { file = $4; sub(/:$/, "", file); next }
+    /^[[:space:]]*server_name[[:space:]]/ {
+      line = $0; sub(/^[[:space:]]*server_name[[:space:]]+/, "", line); gsub(/;/, "", line)
+      print file "\tname\t" line; next
+    }
+    /^[[:space:]]*proxy_pass[[:space:]]/ {
+      line = $0; sub(/^[[:space:]]*proxy_pass[[:space:]]+/, "", line); gsub(/;/, "", line)
+      print file "\tproxy\t" line
+    }
+  '
+}
+
+list_sites() {
+  log "Сайты nginx на сервере"
+  local map; map="$(nginx_map)"
+  if [[ -z "$map" ]]; then
+    warn "nginx -T ничего не вернул (nginx не установлен или не запущен)"
+    return
+  fi
+  awk -F'\t' '$2 == "name" { printf "  %-46s %s\n", $3, $1 }' <<< "$map" | sort -u
+  echo
+  awk -F'\t' '$2 == "proxy" { printf "  → %-44s %s\n", $3, $1 }' <<< "$map" | sort -u
+}
+
+# Plesk сам пересобирает конфиги доменов, поэтому свои директивы туда кладут
+# отдельным файлом vhost_nginx.conf — он переживает пересборку.
+plesk_vhost_file() {
+  local domain="$1"
+  [[ -n "$domain" ]] || return 1
+  local dir="/var/www/vhosts/system/${domain}/conf"
+  [[ -d "$dir" ]] || return 1
+  echo "${dir}/vhost_nginx.conf"
+}
+
+# Ищем файл сайта: явный путь → по домену → по порту соседней панели.
+resolve_site_file() {
+  local explicit="$1" domain="$2" port="$3" map file
+
+  if [[ -n "$explicit" && "$explicit" != "auto" ]]; then
+    [[ -f "$explicit" ]] || die "файл сайта не найден: $explicit"
+    echo "$explicit"
+    return 0
+  fi
+
+  map="$(nginx_map)"
+  [[ -n "$map" ]] || die "не удалось прочитать конфигурацию nginx (nginx -T)"
+
+  if [[ -n "$domain" ]]; then
+    file="$(awk -F'\t' -v d="$domain" '$2 == "name" && index(" " $3 " ", " " d " ") { print $1; exit }' <<< "$map")"
+    [[ -n "$file" ]] && { echo "$file"; return 0; }
+  fi
+
+  file="$(awk -F'\t' -v p="127.0.0.1:${port}" '$2 == "proxy" && index($3, p) { print $1; exit }' <<< "$map")"
+  [[ -n "$file" ]] && { echo "$file"; return 0; }
+
+  return 1
+}
+
 attach_to_site() {
-  local target="$ATTACH_SITE" oport tmp
+  local target oport
   oport="$(neighbour_port)"
 
-  if [[ "$target" == "auto" || -z "$target" ]]; then
-    target="$(grep -rlsE "proxy_pass http://127\.0\.0\.1:${oport}" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null | head -1 || true)"
-    target="$(readlink -f "$target" 2>/dev/null || true)"
-    [[ -n "$target" ]] || die "не нашёл работающий сайт nginx — укажите файл: --attach-site /etc/nginx/sites-available/имя"
+  if ! target="$(resolve_site_file "$ATTACH_SITE" "$DOMAIN" "$oport")"; then
+    echo
+    list_sites
+    echo
+    die "не понял, в какой сайт встраивать панель. Укажите домен (--domain seller.anex-online.kz) или файл (--attach-site /путь/к/конфигу) из списка выше"
   fi
-  [[ -f "$target" ]] || die "файл сайта не найден: $target"
 
-  [[ -n "$BASE_PATH" ]] || die "--attach-site требует --base-path, например: --base-path /anex-orders"
-
-  log "Добавляю путь ${BASE_PATH} в сайт ${target}"
+  [[ -n "$BASE_PATH" ]] || die "нужен путь: --base-path /anex-orders"
   write_access_snippet
 
-  cp -a "$target" "${target}.anex-orders.bak"
-  tmp="$(mktemp)"
+  # Plesk: свои директивы кладём в отдельный файл домена, чужой конфиг не трогаем.
+  local plesk_file=""
+  if plesk_file="$(plesk_vhost_file "$DOMAIN")"; then
+    attach_plesk "$plesk_file"
+    return
+  fi
 
-  # Сначала убираем прошлую вставку — команда идемпотентна.
-  strip_block "$target" > "$tmp"
+  log "Добавляю путь ${BASE_PATH} в сайт ${target}"
+  cp -a "$target" "${target}.anex-orders.bak"
+
+  local tmp; tmp="$(mktemp)"
+  strip_block "$target" > "$tmp"     # вставка идемпотентна: старый блок убираем
+
   if [[ $DETACH_SITE -eq 0 ]]; then
     local with_block
     with_block="$(insert_block "$tmp" "$oport" "$(location_block)")"
-    if [[ -z "$with_block" ]] || ! grep -q "$MARK_BEGIN" <<< "$with_block"; then
+    if ! grep -q "$MARK_BEGIN" <<< "$with_block"; then
       rm -f "$tmp"
-      die "не нашёл в ${target} блок server{}, который проксирует на панель (порт ${oport})"
+      echo
+      list_sites
+      die "в ${target} нет блока server{}, который проксирует на 127.0.0.1:${oport} — укажите файл явно через --attach-site"
     fi
     printf '%s\n' "$with_block" > "$tmp"
   fi
 
   cat "$tmp" > "$target"
   rm -f "$tmp"
+  reload_or_rollback "$target" "${target}.anex-orders.bak"
+}
 
+attach_plesk() {
+  local file="$1" dir
+  dir="$(dirname "$file")"
+  log "Plesk: пишу директивы домена в ${file}"
+  mkdir -p "$dir"
+  [[ -f "$file" ]] && cp -a "$file" "${file}.anex-orders.bak" || : > "${file}.anex-orders.bak"
+
+  local tmp; tmp="$(mktemp)"
+  [[ -f "$file" ]] && strip_block "$file" > "$tmp" || : > "$tmp"
+  [[ $DETACH_SITE -eq 0 ]] && location_block >> "$tmp"
+  cat "$tmp" > "$file"
+  rm -f "$tmp"
+
+  if command -v plesk >/dev/null; then
+    plesk sbin httpdmng --reconfigure-domain "$DOMAIN" >/dev/null 2>&1 || warn "не удалось пересобрать конфигурацию домена в Plesk"
+  fi
+  reload_or_rollback "$file" "${file}.anex-orders.bak"
+}
+
+reload_or_rollback() {
+  local file="$1" backup="$2"
   if nginx -t >/dev/null 2>&1; then
-    systemctl reload nginx
+    systemctl reload nginx 2>/dev/null || nginx -s reload 2>/dev/null || true
     if [[ $DETACH_SITE -eq 1 ]]; then
-      ok "путь убран из ${target}"
+      ok "путь убран из ${file}"
     else
-      ok "панель доступна по пути ${BASE_PATH}/ на этом сайте"
-      warn "файл ${target} пересоздаётся скриптом Ozon Pack (deploy/ssl.sh):"
-      warn "после его запуска повторите установку — путь вернётся"
+      ok "панель доступна по пути ${BASE_PATH}/"
+      warn "если конфиг сайта пересоздаст его собственный скрипт — повторите эту команду"
     fi
   else
-    cp -a "${target}.anex-orders.bak" "$target"
+    cp -a "$backup" "$file"
     nginx -t || true
-    die "конфигурация nginx не прошла проверку — файл сайта возвращён как был"
+    die "конфигурация nginx не прошла проверку — файл возвращён как был"
   fi
 }
 
@@ -565,6 +660,11 @@ health_check() {
 }
 
 if [[ "${DEPLOY_LIB_ONLY:-0}" == "1" ]]; then return 0 2>/dev/null || exit 0; fi
+
+if [[ "${LIST_SITES:-0}" -eq 1 ]]; then
+  list_sites
+  exit 0
+fi
 
 check_neighbour
 install_node
