@@ -272,11 +272,56 @@ install_service() {
 }
 
 # ---------- 5. nginx ----------
+# Приводит запись сети к виду, который принимает nginx: 10.66.66.2/24 → 10.66.66.0/24.
+# Директива allow с ненулевыми битами хоста роняет проверку конфига («low address
+# bits are meaningless»), а nginx на сервере общий с панелью Ozon Pack.
+normalize_cidr() {
+  local entry="$1" ip prefix a b c d num mask net
+  entry="$(printf '%s' "$entry" | tr -d ' ')"
+  [[ -z "$entry" ]] && return 1
+  # IPv6 и прочее отдаём как есть — считаем только IPv4.
+  [[ "$entry" == *:* ]] && { printf '%s' "$entry"; return 0; }
+
+  ip="${entry%%/*}"
+  prefix="${entry#*/}"
+  [[ "$prefix" == "$entry" ]] && prefix=32
+  [[ "$prefix" =~ ^[0-9]+$ ]] && [[ "$prefix" -le 32 ]] || return 1
+  [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+
+  IFS=. read -r a b c d <<< "$ip"
+  for octet in "$a" "$b" "$c" "$d"; do [[ "$octet" -le 255 ]] || return 1; done
+
+  num=$(( (a << 24) | (b << 16) | (c << 8) | d ))
+  if [[ "$prefix" -eq 0 ]]; then mask=0; else mask=$(( (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF )); fi
+  net=$(( num & mask ))
+  printf '%d.%d.%d.%d/%d' $(( (net >> 24) & 255 )) $(( (net >> 16) & 255 )) $(( (net >> 8) & 255 )) $(( net & 255 )) "$prefix"
+}
+
 # Свой файл правил доступа: снипет соседа принадлежит его скриптам,
 # поэтому копируем из него только список сетей.
 write_access_snippet() {
+  # Порядок источников: флаг запуска → сохранённый список → сети соседней панели.
+  # Без сохранённого списка повторный запуск без флага открыл бы панель всем.
   local list="$ALLOW_SUBNETS"
+  if [[ -z "$list" && -f "$DIR/.env" ]]; then
+    list="$(read_env "$DIR/.env" ALLOW_SUBNETS)"
+  fi
   [[ -n "$list" ]] || list="$(neighbour_allowlist)"
+
+  # Нормализуем и отбрасываем мусор: в nginx попадает только проверенное.
+  local normalized="" item
+  while IFS= read -r item; do
+    [[ -z "$item" ]] && continue
+    case "$item" in 127.0.0.1|::1|all) continue ;; esac
+    if net="$(normalize_cidr "$item")"; then
+      [[ "$net" != "$item" ]] && info_normalized="${info_normalized:+$info_normalized, }${item} → ${net}"
+      normalized="${normalized:+$normalized,}$net"
+    else
+      warn "не разобрал сеть «${item}» — пропускаю"
+    fi
+  done < <(printf '%s\n' "$list" | tr ',' '\n')
+  [[ -n "${info_normalized:-}" ]] && ok "приведено к виду сети: ${info_normalized}"
+  list="$normalized"
 
   mkdir -p "$(dirname "$ACCESS_SNIPPET")"
   {
@@ -285,9 +330,7 @@ write_access_snippet() {
     echo "allow ::1;"
     if [[ -n "$list" ]]; then
       printf '%s\n' "$list" | tr ',' '\n' | while read -r net; do
-        net="$(printf '%s' "$net" | tr -d ' ')"
-        case "$net" in ""|127.0.0.1|::1|all) continue ;; esac
-        echo "allow $net;"
+        [[ -n "$net" ]] && echo "allow $net;"
       done
       echo "deny all;"
     else
@@ -296,6 +339,12 @@ write_access_snippet() {
       echo "allow all;"
     fi
   } > "$ACCESS_SNIPPET"
+
+  # Сохраняем список, чтобы повторный запуск без флага не открыл панель.
+  if [[ -n "$list" && -f "$DIR/.env" ]]; then
+    set_env "$DIR/.env" ALLOW_SUBNETS "$list"
+    chown "$RUN_USER":"$RUN_USER" "$DIR/.env" 2>/dev/null || true
+  fi
 
   if [[ -n "$list" ]]; then
     ok "доступ разрешён сетям: ${list}"

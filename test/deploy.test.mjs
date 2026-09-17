@@ -120,3 +120,48 @@ test('шаблон сайта nginx подключает файл правил �
   assert.match(template, /include __ACCESS_SNIPPET__;/);
   assert.match(template, /proxy_pass http:\/\/127\.0\.0\.1:__PORT__;/);
 });
+
+test('адрес клиента VPN приводится к сети, которую принимает nginx', () => {
+  const cases = {
+    '10.66.66.2/24': '10.66.66.0/24',   // адрес клиента WireGuard → сеть туннеля
+    '10.66.66.0/24': '10.66.66.0/24',
+    '10.66.66.2': '10.66.66.2/32',      // одиночный адрес
+    '192.168.1.130/16': '192.168.0.0/16',
+    '10.8.0.0/24': '10.8.0.0/24',
+  };
+  for (const [input, expected] of Object.entries(cases)) {
+    assert.equal(runBash(`normalize_cidr '${input}'`).trim(), expected, input);
+  }
+});
+
+test('нераспознанная запись не попадает в конфиг nginx', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'snippet-'));
+  const file = join(dir, 'access.conf');
+
+  runBash(`ACCESS_SNIPPET="${file}"; DIR="${dir}"; ALLOW_SUBNETS="10.66.66.2/24,мусор,10.66.66.300/24"; write_access_snippet`);
+  const conf = readFileSync(file, 'utf8');
+
+  assert.match(conf, /^allow 10\.66\.66\.0\/24;$/m);
+  assert.match(conf, /^deny all;$/m);
+  assert.ok(!conf.includes('мусор'));
+  assert.ok(!conf.includes('10.66.66.300'));
+  // В файле только директивы nginx и комментарии — ничего постороннего.
+  for (const line of conf.split('\n').filter(Boolean)) {
+    assert.match(line, /^(#|allow [\da-f:./]+;$|deny all;$)/i, line);
+  }
+});
+
+test('список сетей сохраняется и переживает повторный запуск без флага', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'snippet-'));
+  const file = join(dir, 'access.conf');
+  writeFileSync(join(dir, '.env'), 'PORT=3010\n');
+
+  runBash(`ACCESS_SNIPPET="${file}"; DIR="${dir}"; RUN_USER="$(id -un)"; ALLOW_SUBNETS="10.66.66.2/24"; write_access_snippet`);
+  assert.match(readFileSync(join(dir, '.env'), 'utf8'), /^ALLOW_SUBNETS=10\.66\.66\.0\/24$/m);
+
+  // Повторный запуск без флага и без соседней панели: доступ остаётся закрытым.
+  runBash(`ACCESS_SNIPPET="${file}"; DIR="${dir}"; RUN_USER="$(id -un)"; ALLOW_SUBNETS=""; OZON_DIR="${dir}/нет"; OZON_SNIPPET="${dir}/нет"; write_access_snippet`);
+  const conf = readFileSync(file, 'utf8');
+  assert.match(conf, /^allow 10\.66\.66\.0\/24;$/m);
+  assert.match(conf, /^deny all;$/m);
+});
