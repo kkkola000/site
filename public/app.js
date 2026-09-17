@@ -21,6 +21,7 @@ const el = {
   refresh: document.getElementById('refresh'),
   banner: document.getElementById('banner'),
   updated: document.getElementById('updated'),
+  settings: document.getElementById('settings'),
   drawer: document.getElementById('drawer'),
   drawerBody: document.getElementById('drawer-body'),
   drawerTitle: document.getElementById('drawer-title'),
@@ -126,7 +127,19 @@ function orderCard(order) {
   </article>`;
 }
 
+function renderSetup() {
+  el.list.innerHTML = `<div class="empty">
+    <div class="empty__title">Панель ещё не подключена к Яндекс Доставке</div>
+    <div>Укажите токен API — заказы появятся сразу после сохранения.</div>
+    <div style="margin-top:16px"><button class="btn" type="button" data-open-settings>Открыть настройки</button></div>
+  </div>`;
+}
+
 function renderList() {
+  if (state.needsToken) {
+    renderSetup();
+    return;
+  }
   if (!state.groups.length) {
     el.list.innerHTML = `<div class="empty">
       <div class="empty__title">Заказов нет</div>
@@ -167,13 +180,16 @@ async function load({ force = false, showSkeleton = false } = {}) {
     state.tabs = data.tabs;
     state.counts = data.counts;
     state.groups = data.groups;
+    state.needsToken = Boolean(data.needsToken);
 
     renderTabs();
     renderList();
 
     el.banner.hidden = !data.error;
     if (data.error) el.banner.textContent = `Данные могут быть неактуальны: ${data.error}`;
-    el.updated.textContent = `Обновлено: ${formatDateTime(data.updatedAt)} · заказов: ${data.total}`;
+    el.updated.textContent = state.needsToken
+      ? 'Токен API не задан'
+      : `Обновлено: ${formatDateTime(data.updatedAt)} · заказов: ${data.total}`;
   } catch (err) {
     el.banner.hidden = false;
     el.banner.textContent = err.message;
@@ -260,6 +276,90 @@ function detailPanels(order) {
   `;
 }
 
+function settingsForm(data) {
+  const status = data.tokenSet
+    ? `<div class="chip">Токен задан: ${escapeHtml(data.tokenMask)}${data.tokenSource === 'env' ? ' (из .env)' : ''}</div>`
+    : '<div class="chip chip--warn">Токен не задан</div>';
+
+  return `<div class="panel">
+    <h3>Подключение к Яндекс Доставке</h3>
+    <div class="chips" style="margin:0 0 12px">${status}</div>
+    <form id="settings-form">
+      <label class="field">
+        <span class="field__label">Токен API (Bearer)</span>
+        <input class="field__input" type="password" name="token" autocomplete="off" spellcheck="false"
+               placeholder="${data.tokenSet ? 'Оставьте пустым, чтобы не менять' : 'y2_...'}">
+      </label>
+      <label class="field">
+        <span class="field__label">Склады отгрузки, через запятую (необязательно)</span>
+        <input class="field__input" type="text" name="stationIds" autocomplete="off" spellcheck="false"
+               value="${escapeHtml((data.stationIds || []).join(', '))}" placeholder="platform_station_id">
+      </label>
+      <div class="field__hint">
+        Токен: личный кабинет Яндекс Доставки → Интеграция → «Получить токен».
+        Хранится на сервере в файле с правами 600 и в браузер обратно не отдаётся.
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn" type="submit">Сохранить</button>
+        <button class="btn btn--ghost" type="button" data-test-connection>Проверить связь</button>
+      </div>
+      <div id="settings-result"></div>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h3>Сервер</h3>
+    <div class="card__rows">
+      <div class="row"><span class="row__label">API</span><span class="row__value">${escapeHtml(data.apiBase)}</span></div>
+      ${data.updatedAt ? `<div class="row"><span class="row__label">Изменено</span><span class="row__value">${escapeHtml(formatDateTime(data.updatedAt))}</span></div>` : ''}
+    </div>
+  </div>`;
+}
+
+async function openSettings() {
+  el.drawer.hidden = false;
+  el.drawerTitle.textContent = 'Настройки';
+  el.drawerBody.innerHTML = '<div class="skeleton-card"></div>';
+  document.body.style.overflow = 'hidden';
+
+  const data = await (await fetch(api('/api/settings'))).json();
+  el.drawerBody.innerHTML = settingsForm(data);
+
+  const form = document.getElementById('settings-form');
+  const result = document.getElementById('settings-result');
+  const say = (ok, text) => {
+    result.innerHTML = `<div class="banner" style="${ok ? 'background:#e3f7ec;color:#1a7f4b' : ''}">${escapeHtml(text)}</div>`;
+  };
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const token = form.token.value.trim();
+    const payload = { stationIds: form.stationIds.value };
+    // Пустое поле означает «не менять», а не «стереть токен».
+    if (token) payload.token = token;
+
+    const response = await fetch(api('/api/settings'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      say(false, 'Не удалось сохранить настройки');
+      return;
+    }
+    form.token.value = '';
+    say(true, 'Сохранено');
+    load({ force: true });
+  });
+
+  form.querySelector('[data-test-connection]').addEventListener('click', async () => {
+    say(true, 'Проверяю…');
+    const response = await fetch(api('/api/settings/test'), { method: 'POST' });
+    const data_ = await response.json();
+    say(data_.ok, data_.message);
+  });
+}
+
 async function openOrder(id) {
   el.drawer.hidden = false;
   el.drawerTitle.textContent = 'Заказ';
@@ -280,6 +380,7 @@ async function openOrder(id) {
 function closeDrawer() {
   el.drawer.hidden = true;
   document.body.style.overflow = '';
+  if (location.hash === '#settings') history.replaceState(null, '', location.pathname + location.search);
 }
 
 // ---------- События ----------
@@ -289,7 +390,10 @@ el.tabs.addEventListener('click', (event) => {
   if (!button) return;
   state.tab = button.dataset.tab;
   renderTabs();
-  load({ showSkeleton: true });
+  // Прямая ссылка на настройки: /#settings
+if (location.hash === '#settings') openSettings();
+
+load({ showSkeleton: true });
 });
 
 let searchTimer;
@@ -312,7 +416,13 @@ el.clear.addEventListener('click', () => {
 
 el.refresh.addEventListener('click', () => load({ force: true }));
 
+el.settings.addEventListener('click', openSettings);
+
 el.list.addEventListener('click', (event) => {
+  if (event.target.closest('[data-open-settings]')) {
+    openSettings();
+    return;
+  }
   const card = event.target.closest('[data-id]');
   if (card) openOrder(card.dataset.id);
 });
@@ -341,5 +451,8 @@ document.addEventListener('keydown', (event) => {
 setInterval(() => {
   if (!state.loading && el.drawer.hidden && document.visibilityState === 'visible') load();
 }, 60000);
+
+// Прямая ссылка на настройки: /#settings
+if (location.hash === '#settings') openSettings();
 
 load({ showSkeleton: true });

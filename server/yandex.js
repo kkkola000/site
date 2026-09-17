@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { effectiveToken } from './settings.js';
 
 // Эндпоинты API «Доставка в другой день» (b2b-authproxy.taxi.yandex.net).
 // Источник: Список методов, раздел «3. Основные запросы».
@@ -55,8 +56,12 @@ function describeError(body, status) {
  * Повтор — только для сетевых ошибок и 5xx: 4xx повторять бессмысленно.
  */
 export async function call(endpoint, { query, body, raw = false, retries = 2 } = {}) {
-  if (!config.yandex.token) {
-    throw new YandexApiError('Не задан YANDEX_OAUTH_TOKEN', { endpoint: endpoint.path });
+  const token = effectiveToken();
+  if (!token) {
+    throw new YandexApiError('Токен Яндекс Доставки не задан — укажите его в настройках панели', {
+      endpoint: endpoint.path,
+      status: 0,
+    });
   }
 
   const url = buildUrl(endpoint.path, query);
@@ -69,7 +74,7 @@ export async function call(endpoint, { query, body, raw = false, retries = 2 } =
       const response = await fetch(url, {
         method: endpoint.method,
         headers: {
-          Authorization: `Bearer ${config.yandex.token}`,
+          Authorization: `Bearer ${token}`,
           Accept: raw ? 'application/pdf' : 'application/json',
           ...(endpoint.method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
         },
@@ -121,7 +126,7 @@ export async function call(endpoint, { query, body, raw = false, retries = 2 } =
 export function explain(err) {
   if (err instanceof YandexApiError) {
     if (err.status === 401 || err.status === 403) {
-      return 'Яндекс Доставка отклонила токен (HTTP ' + err.status + '). Проверьте YANDEX_OAUTH_TOKEN.';
+      return 'Яндекс Доставка отклонила токен (HTTP ' + err.status + '). Проверьте его в настройках панели.';
     }
     if (!err.status) return `Нет связи с API Яндекс Доставки: ${err.message}`;
     return `Яндекс Доставка (HTTP ${err.status}): ${err.message}`;

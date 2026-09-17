@@ -16,6 +16,10 @@ OZON_DIR="/opt/ozon-pack"
 OZON_SNIPPET="/etc/nginx/snippets/ozon-pack-access.conf"
 ACCESS_SNIPPET="/etc/nginx/snippets/anex-orders-access.conf"
 ALLOW_SUBNETS=""
+ATTACH_SITE=""      # auto | путь к файлу сайта nginx
+DETACH_SITE=0
+MARK_BEGIN="# >>> anex-orders: панель заказов (добавлено deploy.sh) >>>"
+MARK_END="# <<< anex-orders <<<"
 DIR="/opt/anex-orders"
 RUN_USER="anexorders"
 PORT="3010"
@@ -45,8 +49,8 @@ usage() {
 
 Использование: sudo bash deploy/deploy.sh [опции]
 
-  --token <строка>      OAuth-токен Яндекс Доставки (Профиль → Интеграция).
-                        Если не указан и .env уже настроен — берётся из .env.
+  --token <строка>      OAuth-токен Яндекс Доставки. Указывать необязательно:
+                        его можно ввести прямо в панели, в разделе «Настройки».
   --stations <id,id>    platform_station_id складов отгрузки (фильтр выборки).
   --port <порт>         Локальный порт сервиса (по умолчанию ${PORT}).
   --base-path <путь>    Подпуть, если панель встраивается в существующий домен,
@@ -55,9 +59,15 @@ usage() {
   --user <имя>          Системный пользователь сервиса (по умолчанию ${RUN_USER}).
   --auth-user <имя>     Логин для входа в панель (по умолчанию ${AUTH_USER}).
   --auth-password <..>  Пароль панели. Если не задан — будет сгенерирован.
-  --allow-subnet <сеть> Кому открыт доступ через nginx, например 10.8.0.0/24.
+  --allow-subnet <сеть> Кому открыт доступ через nginx, например 10.66.66.0/24.
                         Можно указать несколько раз. Если не задано — берётся
                         список из соседней панели Ozon Pack (VPN-подсеть).
+  --bind <адрес>        Слушать этот адрес напрямую, без nginx. Например
+                        --bind 10.66.66.1 — вход по http://10.66.66.1:ПОРТ
+  --attach-site auto    Добавить путь в уже работающий сайт nginx: панель
+                        откроется по адресу этого сайта + --base-path.
+                        Вместо auto можно указать путь к файлу конфигурации.
+  --detach-site         Убрать ранее добавленный путь из сайта nginx.
 
 nginx на сервере уже настроен, поэтому по умолчанию скрипт его НЕ меняет:
 в конце печатается готовый блок конфигурации для вставки вручную.
@@ -84,6 +94,9 @@ while [[ $# -gt 0 ]]; do
     --auth-user) AUTH_USER="${2:-}"; shift 2 ;;
     --auth-password) AUTH_PASSWORD="${2:-}"; shift 2 ;;
     --allow-subnet) ALLOW_SUBNETS="${ALLOW_SUBNETS:+$ALLOW_SUBNETS,}${2:-}"; shift 2 ;;
+    --bind) BIND_HOST="${2:-}"; shift 2 ;;
+    --attach-site) ATTACH_SITE="${2:-auto}"; shift 2 ;;
+    --detach-site) DETACH_SITE=1; shift ;;
     --ssl) WITH_SSL=1; shift ;;
     --ssl-email) SSL_EMAIL="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -227,10 +240,11 @@ write_env() {
     ok ".env создан"
   fi
 
-  # Панель слушает только localhost: наружу её публикует nginx.
-  set_env "$env_file" HOST "127.0.0.1"
+  # По умолчанию панель слушает localhost и публикуется через nginx.
+  # С --bind она слушает указанный адрес (например, адрес сервера в туннеле).
+  set_env "$env_file" HOST "${BIND_HOST:-127.0.0.1}"
 
-  grep -q '^YANDEX_OAUTH_TOKEN=.\+' "$env_file" || warn "YANDEX_OAUTH_TOKEN пуст — заполните $env_file и перезапустите сервис"
+  grep -q '^YANDEX_OAUTH_TOKEN=.\+' "$env_file" || TOKEN_FROM_PANEL=1
 
   # Дальше работаем с фактическими значениями из .env: при обновлении
   # логин и пароль могли быть заданы в прошлый раз.
@@ -353,6 +367,113 @@ write_access_snippet() {
   fi
 }
 
+# Блок location для вставки в чужой сайт nginx.
+location_block() {
+  cat <<BLOCK
+$MARK_BEGIN
+    location ${BASE_PATH}/ {
+        include ${ACCESS_SNIPPET};
+        proxy_pass http://127.0.0.1:${PORT}${BASE_PATH}/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 120s;
+    }
+    location = ${BASE_PATH} { return 301 ${BASE_PATH}/; }
+$MARK_END
+BLOCK
+}
+
+# Убирает ранее вставленный блок (между маркерами).
+strip_block() {
+  awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
+    index($0, b) { skip = 1 }
+    !skip { print }
+    index($0, e) { skip = 0 }
+  ' "$1"
+}
+
+# Вставляет блок перед закрывающей скобкой того server{}, который проксирует
+# на соседнюю панель. Другие блоки (редирект на https, acme) не трогаем.
+insert_block() {
+  local file="$1" port="$2" block="$3"
+  awk -v port="$port" -v block="$block" '
+    /^[[:space:]]*server[[:space:]]*\{/ && depth == 0 { inblock = 1; buf = ""; hit = 0 }
+    {
+      if (inblock) {
+        buf = buf $0 "\n"
+        if ($0 ~ ("proxy_pass[[:space:]]+http://127\\.0\\.0\\.1:" port)) hit = 1
+        n = gsub(/\{/, "{"); depth += n
+        n = gsub(/\}/, "}"); depth -= n
+        if (depth <= 0) {
+          if (hit) {
+            # Вставляем перед последней скобкой блока.
+            sub(/\}[[:space:]]*\n$/, "", buf)
+            printf "%s%s\n}\n", buf, block
+          } else {
+            printf "%s", buf
+          }
+          inblock = 0; depth = 0; next
+        }
+        next
+      }
+      print
+    }
+  ' "$file"
+}
+
+attach_to_site() {
+  local target="$ATTACH_SITE" oport tmp
+  oport="$(neighbour_port)"
+
+  if [[ "$target" == "auto" || -z "$target" ]]; then
+    target="$(grep -rlsE "proxy_pass http://127\.0\.0\.1:${oport}" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null | head -1 || true)"
+    target="$(readlink -f "$target" 2>/dev/null || true)"
+    [[ -n "$target" ]] || die "не нашёл работающий сайт nginx — укажите файл: --attach-site /etc/nginx/sites-available/имя"
+  fi
+  [[ -f "$target" ]] || die "файл сайта не найден: $target"
+
+  [[ -n "$BASE_PATH" ]] || die "--attach-site требует --base-path, например: --base-path /anex-orders"
+
+  log "Добавляю путь ${BASE_PATH} в сайт ${target}"
+  write_access_snippet
+
+  cp -a "$target" "${target}.anex-orders.bak"
+  tmp="$(mktemp)"
+
+  # Сначала убираем прошлую вставку — команда идемпотентна.
+  strip_block "$target" > "$tmp"
+  if [[ $DETACH_SITE -eq 0 ]]; then
+    local with_block
+    with_block="$(insert_block "$tmp" "$oport" "$(location_block)")"
+    if [[ -z "$with_block" ]] || ! grep -q "$MARK_BEGIN" <<< "$with_block"; then
+      rm -f "$tmp"
+      die "не нашёл в ${target} блок server{}, который проксирует на панель (порт ${oport})"
+    fi
+    printf '%s\n' "$with_block" > "$tmp"
+  fi
+
+  cat "$tmp" > "$target"
+  rm -f "$tmp"
+
+  if nginx -t >/dev/null 2>&1; then
+    systemctl reload nginx
+    if [[ $DETACH_SITE -eq 1 ]]; then
+      ok "путь убран из ${target}"
+    else
+      ok "панель доступна по пути ${BASE_PATH}/ на этом сайте"
+      warn "файл ${target} пересоздаётся скриптом Ozon Pack (deploy/ssl.sh):"
+      warn "после его запуска повторите установку — путь вернётся"
+    fi
+  else
+    cp -a "${target}.anex-orders.bak" "$target"
+    nginx -t || true
+    die "конфигурация nginx не прошла проверку — файл сайта возвращён как был"
+  fi
+}
+
 install_nginx() {
   if [[ $WITH_NGINX -ne 1 ]]; then
     warn "nginx не настраивается (на сервере уже есть своя конфигурация) — блок для вставки будет ниже"
@@ -450,7 +571,11 @@ install_node
 install_files
 write_env
 install_service
-install_nginx
+if [[ -n "$ATTACH_SITE" || $DETACH_SITE -eq 1 ]]; then
+  attach_to_site
+else
+  install_nginx
+fi
 health_check
 print_nginx_snippet
 
@@ -463,6 +588,12 @@ if [[ "${GENERATED_PASSWORD:-0}" -eq 1 ]]; then
   echo "  Пароль:    ${AUTH_PASSWORD}   <- сгенерирован, сохраните"
 else
   echo "  Пароль:    из ${DIR}/.env"
+fi
+if [[ "${TOKEN_FROM_PANEL:-0}" -eq 1 && ! -s "${DIR}/config/settings.json" ]]; then
+  echo
+  echo "  Токен Яндекс Доставки ещё не задан:"
+  echo "  откройте панель → ⚙ Настройки → «Токен API» → Сохранить."
+  echo
 fi
 echo "  Конфиг:    ${DIR}/.env"
 echo "  Журнал:    journalctl -u ${SERVICE} -f"

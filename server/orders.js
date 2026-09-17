@@ -2,6 +2,7 @@ import { config } from './config.js';
 import { listRequests, getRequestInfo, getRequestHistory, getActualInfo, explain } from './yandex.js';
 import { getStations } from './stations.js';
 import { normalizeOrder, searchIndex } from './normalize.js';
+import { effectiveStationIds } from './settings.js';
 import { TABS, resolveStatus } from './statuses.js';
 
 let cache = { at: 0, orders: [], error: null };
@@ -24,9 +25,10 @@ async function load() {
     .map((report) => normalizeOrder(report, { stations }))
     .filter((order) => order && order.id);
 
-  // Фильтр по складам отгрузки, если он задан в конфиге.
-  if (config.yandex.stationIds.length) {
-    const allowed = new Set(config.yandex.stationIds);
+  // Фильтр по складам отгрузки, если он задан в настройках или в .env.
+  const stationIds = effectiveStationIds();
+  if (stationIds.length) {
+    const allowed = new Set(stationIds);
     orders = orders.filter((order) => !order.shipment.stationId || allowed.has(order.shipment.stationId));
   }
 
@@ -57,6 +59,12 @@ export async function getOrders({ force = false } = {}) {
       });
   }
   return inflight;
+}
+
+/** Сбрасывает снимок заказов: вызывается после смены токена или складов. */
+export function resetCache() {
+  cache = { at: 0, orders: [], error: null };
+  inflight = null;
 }
 
 export function filterOrders(orders, { tab = 'all', q = '' } = {}) {

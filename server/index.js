@@ -4,8 +4,10 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import { config, ROOT, authEnabled } from './config.js';
 import { TABS, isKnownTab } from './statuses.js';
-import { getOrders, filterOrders, countByTab, groupByDate, stripInternal, getOrderDetails } from './orders.js';
-import { generateLabels, YandexApiError, explain } from './yandex.js';
+import { getOrders, filterOrders, countByTab, groupByDate, stripInternal, getOrderDetails, resetCache } from './orders.js';
+import { generateLabels, listWarehouses, YandexApiError, explain } from './yandex.js';
+import { settingsView, saveSettings, effectiveToken } from './settings.js';
+import { resetStations } from './stations.js';
 
 const PUBLIC_DIR = resolve(ROOT, 'public');
 
@@ -28,6 +30,23 @@ function sendJson(res, status, payload) {
     'Cache-Control': 'no-store',
   });
   res.end(body);
+}
+
+// Тело запроса: ограничиваем размер, чтобы запрос не смог занять память.
+async function readJsonBody(req, limit = 64 * 1024) {
+  let size = 0;
+  const chunks = [];
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) throw new Error('Слишком большой запрос');
+    chunks.push(chunk);
+  }
+  if (!chunks.length) return {};
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  } catch {
+    throw new Error('Тело запроса — не JSON');
+  }
 }
 
 function safeEqual(a, b) {
@@ -85,7 +104,37 @@ async function handleApi(req, res, url, pathname) {
   const parts = pathname.split('/').filter(Boolean); // ['api', ...]
 
   if (pathname === '/api/health') {
-    sendJson(res, 200, { ok: true, tokenConfigured: Boolean(config.yandex.token), base: config.yandex.base });
+    sendJson(res, 200, { ok: true, tokenConfigured: Boolean(effectiveToken()), base: config.yandex.base });
+    return;
+  }
+
+  if (pathname === '/api/settings') {
+    if (req.method === 'GET') {
+      sendJson(res, 200, settingsView());
+      return;
+    }
+    if (req.method === 'POST') {
+      const body = await readJsonBody(req);
+      saveSettings({ token: body.token, stationIds: body.stationIds });
+      // Новый токен — новые данные: старый снимок и справочник складов сбрасываем.
+      resetCache();
+      resetStations();
+      sendJson(res, 200, settingsView());
+      return;
+    }
+    sendJson(res, 405, { error: 'Метод не поддерживается' });
+    return;
+  }
+
+  // Проверка связи: самый дешёвый запрос к API, который требует валидный токен.
+  if (pathname === '/api/settings/test' && req.method === 'POST') {
+    try {
+      const warehouses = await listWarehouses();
+      const count = Array.isArray(warehouses?.warehouses) ? warehouses.warehouses.length : 0;
+      sendJson(res, 200, { ok: true, message: count ? `Связь есть, складов: ${count}` : 'Связь есть' });
+    } catch (err) {
+      sendJson(res, 200, { ok: false, message: explain(err) });
+    }
     return;
   }
 
@@ -94,6 +143,20 @@ async function handleApi(req, res, url, pathname) {
     const tab = isKnownTab(tabParam) ? tabParam : 'all';
     const q = url.searchParams.get('q') || '';
     const force = url.searchParams.get('refresh') === '1';
+
+    // Без токена не ходим в API: панель покажет экран настройки, а не ошибку.
+    if (!effectiveToken()) {
+      sendJson(res, 200, {
+        tabs: TABS,
+        counts: Object.fromEntries(TABS.map((tab) => [tab.id, 0])),
+        groups: [],
+        total: 0,
+        updatedAt: new Date().toISOString(),
+        error: null,
+        needsToken: true,
+      });
+      return;
+    }
 
     const snapshot = await getOrders({ force });
     const filtered = filterOrders(snapshot.orders, { tab, q });
@@ -107,6 +170,7 @@ async function handleApi(req, res, url, pathname) {
       total: filtered.length,
       updatedAt: new Date(snapshot.at).toISOString(),
       error: snapshot.error,
+      needsToken: false,
     });
     return;
   }
@@ -183,7 +247,7 @@ server.listen(config.port, config.host, () => {
   const { port } = server.address();
   console.log(`Панель заказов: http://${config.host}:${port}${config.basePath}`);
   console.log(`API Яндекс Доставки: ${config.yandex.base}`);
-  if (!config.yandex.token) console.warn('ВНИМАНИЕ: YANDEX_OAUTH_TOKEN не задан — заказы не загрузятся.');
+  if (!effectiveToken()) console.warn('Токен Яндекс Доставки не задан — введите его в настройках панели.');
   if (!authEnabled()) console.warn('ВНИМАНИЕ: панель без пароля — задайте AUTH_USER и AUTH_PASSWORD.');
 });
 

@@ -165,3 +165,110 @@ test('список сетей сохраняется и переживает п�
   assert.match(conf, /^allow 10\.66\.66\.0\/24;$/m);
   assert.match(conf, /^deny all;$/m);
 });
+
+// --- Развёртывание одной командой ---
+
+test('bootstrap передаёт аргументы в deploy.sh без изменений', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'bootstrap-'));
+  execFileSync('mkdir', ['-p', join(dir, 'deploy')]);
+  writeFileSync(join(dir, 'deploy/deploy.sh'), '#!/usr/bin/env bash\nprintf "%s\\n" "$@"\n');
+
+  const out = execFileSync(
+    'bash',
+    [resolve(import.meta.dirname, '../deploy/bootstrap.sh'), '--port', '3010', '--allow-subnet', '10.66.66.0/24'],
+    { encoding: 'utf8', env: { ...process.env, SKIP_CLONE: '1', SRC: dir, EUID: '0' } },
+  );
+
+  // Клонирование пропущено, аргументы дошли до установщика как есть.
+  assert.match(out, /^--port$/m);
+  assert.match(out, /^3010$/m);
+  assert.match(out, /^--allow-subnet$/m);
+  assert.match(out, /^10\.66\.66\.0\/24$/m);
+});
+
+test('bootstrap останавливается, если кода нет', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'bootstrap-'));
+  assert.throws(
+    () =>
+      execFileSync('bash', [resolve(import.meta.dirname, '../deploy/bootstrap.sh')], {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        env: { ...process.env, SKIP_CLONE: '1', SRC: dir },
+      }),
+    /нет deploy\/deploy\.sh/,
+  );
+});
+
+// --- Встраивание пути в уже работающий сайт nginx ---
+
+const SITE_SAMPLE = `# Создано deploy/ssl.sh для Ozon Pack. Правки перезапишутся при повторном запуске.
+server {
+    listen 80;
+    server_name seller.anex-online.kz;
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name seller.anex-online.kz;
+
+    location / {
+        include /etc/nginx/snippets/ozon-pack-access.conf;
+        proxy_pass http://127.0.0.1:8080;
+    }
+}
+`;
+
+const withBlock = (file, port = 8080) =>
+  runBash(
+    `BASE_PATH=/anex-orders; PORT=3010; ACCESS_SNIPPET=/etc/nginx/snippets/anex-orders-access.conf\n` +
+      `insert_block "${file}" ${port} "$(location_block)"`,
+  );
+
+test('путь добавляется в блок сайта, который проксирует на соседнюю панель', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'site-')), 'site.conf');
+  writeFileSync(file, SITE_SAMPLE);
+
+  const out = withBlock(file);
+  const blocks = out.split(/^server \{$/m);
+
+  assert.equal(blocks.length, 3, 'должно остаться два блока server');
+  // Блок редиректа на https не тронут.
+  assert.ok(!blocks[1].includes('anex-orders'), 'редирект не должен получить наш путь');
+  // Рабочий блок получил путь и сохранил чужой location.
+  assert.match(blocks[2], /location \/anex-orders\/ \{/);
+  assert.match(blocks[2], /proxy_pass http:\/\/127\.0\.0\.1:3010\/anex-orders\/;/);
+  assert.match(blocks[2], /proxy_pass http:\/\/127\.0\.0\.1:8080;/);
+  assert.match(blocks[2], /location = \/anex-orders \{ return 301 \/anex-orders\/; \}/);
+});
+
+test('повторный запуск не плодит дубли, снятие возвращает файл как был', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'site-'));
+  const file = join(dir, 'site.conf');
+  writeFileSync(file, SITE_SAMPLE);
+
+  writeFileSync(file, withBlock(file));
+  // Повтор: сначала снимаем прошлую вставку, затем вставляем заново.
+  const stripped = join(dir, 'stripped.conf');
+  writeFileSync(stripped, runBash(`strip_block "${file}"`));
+  writeFileSync(file, withBlock(stripped));
+
+  const out = readFileSync(file, 'utf8');
+  assert.equal(out.match(/location \/anex-orders\/ \{/g).length, 1, 'блок должен быть один');
+
+  // Полное снятие возвращает исходный конфиг.
+  assert.equal(runBash(`strip_block "${file}"`), SITE_SAMPLE);
+});
+
+test('если подходящего блока нет, вставка не выполняется', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'site-')), 'site.conf');
+  writeFileSync(file, SITE_SAMPLE);
+
+  // Порт другой панели — совпадений нет, файл остаётся прежним.
+  const out = withBlock(file, 9999);
+  assert.ok(!out.includes('anex-orders'), 'чужой конфиг не должен меняться');
+  assert.equal(out, SITE_SAMPLE);
+});

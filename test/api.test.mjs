@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { reportPickup, reportCourier } from './fixtures.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
@@ -209,4 +211,81 @@ test('панель работает под подпутём существующ
   assert.match(html, /<meta name="base-path" content="\/orders">/);
   assert.match(html, /href="\/orders\/styles\.css"/);
   assert.ok(!html.includes('__BASE__'));
+});
+
+test('токен вводится в панели: сохранение, маскирование, загрузка заказов', async (t) => {
+  const stub = await startStub();
+  t.after(() => stub.server.close());
+
+  const settingsFile = join(mkdtempSync(join(tmpdir(), 'settings-')), 'settings.json');
+  const panel = await startPanel({
+    PORT: '0',
+    HOST: '127.0.0.1',
+    YANDEX_API_BASE: stub.base,
+    YANDEX_OAUTH_TOKEN: '',          // в .env токена нет — только через панель
+    SETTINGS_FILE: settingsFile,
+  });
+  t.after(() => panel.child.kill());
+
+  const json = async (path, init) => (await fetch(`${panel.base}${path}`, init)).json();
+
+  await t.test('без токена панель просит настройку, а не показывает ошибку', async () => {
+    const data = await json('/api/orders');
+    assert.equal(data.needsToken, true);
+    assert.equal(data.error, null);
+    assert.equal(data.total, 0);
+    // В API не ходили: заглушка не получила ни одного запроса.
+    assert.equal(stub.calls.length, 0);
+  });
+
+  await t.test('проверка связи с неверным токеном возвращает причину', async () => {
+    await json('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'wrong' }),
+    });
+    const result = await json('/api/settings/test', { method: 'POST' });
+    assert.equal(result.ok, false);
+    assert.match(result.message, /токен/i);
+  });
+
+  await t.test('сохранённый токен применяется сразу, без перезапуска', async () => {
+    const saved = await json('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: TOKEN, stationIds: 'e1139f6d-e34f-47a9-a55f-31f032a861a6' }),
+    });
+    assert.equal(saved.tokenSet, true);
+    assert.equal(saved.tokenSource, 'panel');
+
+    const result = await json('/api/settings/test', { method: 'POST' });
+    assert.equal(result.ok, true, result.message);
+
+    const orders = await json('/api/orders');
+    assert.equal(orders.needsToken, false);
+    assert.equal(orders.total, 2);
+  });
+
+  await t.test('полный токен в браузер не возвращается', async () => {
+    const view = await json('/api/settings');
+    assert.equal(view.tokenSet, true);
+    assert.ok(!JSON.stringify(view).includes(TOKEN), 'токен не должен уходить в ответе');
+    assert.match(view.tokenMask, /…/);
+  });
+
+  await t.test('файл настроек доступен только владельцу (600)', () => {
+    assert.equal(statSync(settingsFile).mode & 0o777, 0o600);
+    assert.match(readFileSync(settingsFile, 'utf8'), /"token": "test-token"/);
+  });
+
+  await t.test('пустое поле токена не стирает сохранённый', async () => {
+    await json('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stationIds: '' }),
+    });
+    const view = await json('/api/settings');
+    assert.equal(view.tokenSet, true);
+    assert.equal(view.stationIds.length, 0);
+  });
 });

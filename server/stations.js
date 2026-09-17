@@ -56,6 +56,10 @@ function extractStations(payload) {
     .filter(Boolean);
 }
 
+export function resetStations() {
+  cache = { at: 0, map: new Map() };
+}
+
 export async function getStations({ force = false } = {}) {
   const fresh = Date.now() - cache.at < TTL_MS;
   if (!force && fresh && cache.map.size) return cache.map;
