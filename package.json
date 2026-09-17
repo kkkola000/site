@@ -1,0 +1,16 @@
+{
+  "name": "anex-orders-panel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Веб-панель для работы с интернет-заказами. Отображение заказов через API Яндекс Доставки (Доставка в другой день).",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {}
+}
