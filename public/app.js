@@ -140,8 +140,9 @@ function orderCard(order) {
   const badgeClass = order.status.problem ? 'problem' : order.status.group;
 
   const chips = [
-    order.partialRefusal ? '<span class="chip chip--warn">Частичный невыкуп</span>' : '',
-    order.hasReturnPlaces ? '<span class="chip chip--warn">Есть возвратные места</span>' : '',
+    order.refusal === 'full' ? '<span class="chip chip--warn">Полный невыкуп</span>' : '',
+    order.refusal === 'partial' ? '<span class="chip chip--warn">Частичный невыкуп</span>' : '',
+    order.hasReturnPlaces ? '<span class="chip chip--warn">Возвратные грузоместа</span>' : '',
     order.paymentMethodLabel ? `<span class="chip">${escapeHtml(order.paymentMethodLabel)}</span>` : '',
     order.delivery.typeLabel ? `<span class="chip">${escapeHtml(order.delivery.typeLabel)}</span>` : '',
   ].filter(Boolean).join('');

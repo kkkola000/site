@@ -80,6 +80,16 @@ function normalizeInterval(interval) {
 }
 
 /**
+ * Тип невыкупа по документации: полный — получатель отказался от всех единиц
+ * каждого товара, частичный — отказ есть, но забрали хотя бы часть.
+ */
+function refusalType(items) {
+  if (!items.length || !items.some((item) => item.refusedCount > 0)) return 'none';
+  const all = items.every((item) => item.count > 0 && item.refusedCount >= item.count);
+  return all ? 'full' : 'partial';
+}
+
+/**
  * Приводит RequestReport (ответ requests/info и request/info) к карточке заказа панели.
  * stations — справочник platform_id → { name, address } для адресов складов и ПВЗ.
  */
@@ -192,7 +202,7 @@ export function normalizeOrder(report, { stations = new Map() } = {}) {
     sharingUrl: clean(report.sharing_url),
     selfPickupCode: clean(report?.self_pickup_node_code?.code),
     hasReturnPlaces: Array.isArray(report.return_places) && report.return_places.length > 0,
-    partialRefusal: items.some((item) => item.refusedCount > 0),
+    refusal: refusalType(items),
     availableActions: request?.available_actions || {},
     groupDate,
     currency: config.currency,

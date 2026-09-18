@@ -34,7 +34,8 @@ test('курьерский заказ: адрес собирается из де
   assert.equal(order.status.reasonLabel, 'Получатель передумал');
   assert.equal(order.totalPrice, 240000);
   assert.equal(order.deliveryCost, 500);
-  assert.equal(order.partialRefusal, true);
+  // Получатель отказался от 1 из 2 единиц — это частичный невыкуп.
+  assert.equal(order.refusal, 'partial');
   assert.equal(order.hasReturnPlaces, true);
   // Пока оператор не присвоил номер, показываем ID заявки.
   assert.equal(order.trackNumber, 'aa11bb22cc33-udp');
@@ -129,4 +130,27 @@ test('адрес без full_address собирается из частей', ()
     'Москва, Пролетарский проспект, 19, кв. 2',
   );
   assert.equal(formatAddress(null), '');
+});
+
+test('полный и частичный невыкуп различаются', () => {
+  const build = (items) =>
+    normalizeOrder({ ...reportPickup, request: { ...reportPickup.request, items } }, { stations });
+
+  const item = (count, refused) => ({
+    count,
+    name: 'Товар',
+    article: 'A-1',
+    billing_details: { unit_price: 100000 },
+    place_barcode: 'A',
+    refused_count: refused,
+  });
+
+  // Отказов нет.
+  assert.equal(build([item(2, 0), item(1, 0)]).refusal, 'none');
+  // Отказались от всех единиц каждого товара — заказ возвращается целиком.
+  assert.equal(build([item(2, 2), item(1, 1)]).refusal, 'full');
+  // Часть забрали: по одному товару отказ полный, по другому нет.
+  assert.equal(build([item(2, 2), item(1, 0)]).refusal, 'partial');
+  // Забрали часть единиц одного товара.
+  assert.equal(build([item(3, 1)]).refusal, 'partial');
 });
