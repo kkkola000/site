@@ -53,8 +53,14 @@ async function startStub() {
       return json({ delivery_date: '2026-09-17', delivery_interval: { from: '10:00+03:00', to: '18:00+03:00' } });
     }
     if (url.pathname === '/api/b2b/platform/request/generate-labels') {
-      res.writeHead(200, { 'Content-Type': 'application/pdf' });
-      res.end(Buffer.from('%PDF-1.4 stub'));
+      // Возвращаем в теле полученный размер — тест проверяет, что уходит нужный.
+      let body = '';
+      req.on('data', (chunk) => (body += chunk));
+      req.on('end', () => {
+        const size = JSON.parse(body || '{}').label_size_mm || '';
+        res.writeHead(200, { 'Content-Type': 'application/pdf' });
+        res.end(Buffer.from(`%PDF-1.4 ${size}`));
+      });
       return;
     }
     res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -154,11 +160,23 @@ test('панель отдаёт заказы, разделы, поиск, кар
     assert.equal(data.order.actual.deliveryDate, '2026-09-17');
   });
 
-  await t.test('ярлык отдаётся как PDF', async () => {
+  await t.test('ярлык печатается в формате 58x40 по умолчанию', async () => {
     const response = await get('/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label');
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('content-type'), 'application/pdf');
-    assert.match(await response.text(), /^%PDF/);
+    assert.match(response.headers.get('content-disposition'), /58x40\.pdf/);
+    assert.equal(await response.text(), '%PDF-1.4 58x40');
+  });
+
+  await t.test('формат можно выбрать в карточке заказа', async () => {
+    const response = await get('/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label?size=100x150');
+    assert.equal(await response.text(), '%PDF-1.4 100x150');
+  });
+
+  await t.test('неизвестный формат не уходит в API', async () => {
+    // Иначе Яндекс Доставка ответит ошибкой вместо ярлыка.
+    const response = await get('/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label?size=13x37');
+    assert.equal(await response.text(), '%PDF-1.4 58x40');
   });
 
   await t.test('статика панели отдаётся, выход за public/ невозможен', async () => {
@@ -315,4 +333,43 @@ test('токен вводится в панели: сохранение, мас�
     assert.equal(view.tokenSet, true);
     assert.equal(view.stationIds.length, 0);
   });
+});
+
+test('формат ярлыка по умолчанию меняется в настройках', async (t) => {
+  const stub = await startStub();
+  t.after(() => stub.server.close());
+
+  const settingsFile = join(mkdtempSync(join(tmpdir(), 'settings-')), 'settings.json');
+  const panel = await startPanel({
+    PORT: '0',
+    HOST: '127.0.0.1',
+    YANDEX_API_BASE: stub.base,
+    YANDEX_OAUTH_TOKEN: TOKEN,
+    SETTINGS_FILE: settingsFile,
+  });
+  t.after(() => panel.child.kill());
+
+  const json = async (path, init) => (await fetch(`${panel.base}${path}`, init)).json();
+
+  const before = await json('/api/settings');
+  assert.equal(before.labelSize, '58x40');
+  assert.ok(before.labelSizes.some((size) => size.value === '58x40'));
+
+  const saved = await json('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ labelSize: '75x120' }),
+  });
+  assert.equal(saved.labelSize, '75x120');
+
+  const label = await fetch(`${panel.base}/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label`);
+  assert.equal(await label.text(), '%PDF-1.4 75x120');
+
+  // Недопустимое значение не затирает сохранённое.
+  const ignored = await json('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ labelSize: 'A3' }),
+  });
+  assert.equal(ignored.labelSize, '75x120');
 });

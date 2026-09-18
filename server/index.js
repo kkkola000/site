@@ -4,9 +4,18 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import { config, ROOT, authEnabled } from './config.js';
 import { TABS, isKnownTab } from './statuses.js';
-import { getOrders, filterOrders, countByTab, groupByDate, stripInternal, getOrderDetails, resetCache } from './orders.js';
+import {
+  getOrders,
+  filterOrders,
+  countByTab,
+  groupByDate,
+  stripInternal,
+  getOrderDetails,
+  getOrderHistory,
+  resetCache,
+} from './orders.js';
 import { generateLabels, listWarehouses, YandexApiError, explain } from './yandex.js';
-import { settingsView, saveSettings, effectiveToken } from './settings.js';
+import { settingsView, saveSettings, effectiveToken, effectiveLabelSize, isLabelSize } from './settings.js';
 import { resetStations } from './stations.js';
 
 const PUBLIC_DIR = resolve(ROOT, 'public');
@@ -115,7 +124,7 @@ async function handleApi(req, res, url, pathname) {
     }
     if (req.method === 'POST') {
       const body = await readJsonBody(req);
-      saveSettings({ token: body.token, stationIds: body.stationIds });
+      saveSettings({ token: body.token, stationIds: body.stationIds, labelSize: body.labelSize });
       // Новый токен — новые данные: старый снимок и справочник складов сбрасываем.
       resetCache();
       resetStations();
@@ -179,12 +188,19 @@ async function handleApi(req, res, url, pathname) {
   if (parts[0] === 'api' && parts[1] === 'orders' && parts[2]) {
     const requestId = decodeURIComponent(parts[2]);
 
+    if (parts[3] === 'history') {
+      sendJson(res, 200, { history: await getOrderHistory(requestId) });
+      return;
+    }
+
     if (parts[3] === 'label') {
-      const size = url.searchParams.get('size') || '100x150';
+      // Размер берём из запроса, если он допустимый, иначе — из настроек панели.
+      const requested = url.searchParams.get('size');
+      const size = isLabelSize(requested) ? requested : effectiveLabelSize();
       const { buffer, contentType } = await generateLabels([requestId], { labelSize: size });
       res.writeHead(200, {
         'Content-Type': contentType.includes('pdf') ? 'application/pdf' : contentType,
-        'Content-Disposition': `inline; filename="label-${requestId}.pdf"`,
+        'Content-Disposition': `inline; filename="label-${requestId}-${size}.pdf"`,
         'Content-Length': buffer.length,
       });
       res.end(buffer);

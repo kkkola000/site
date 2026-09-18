@@ -65,6 +65,7 @@ export async function getOrders({ force = false } = {}) {
 export function resetCache() {
   cache = { at: 0, orders: [], error: null };
   inflight = null;
+  historyCache.clear();
 }
 
 export function filterOrders(orders, { tab = 'all', q = '' } = {}) {
@@ -108,25 +109,13 @@ export function groupByDate(orders) {
     .map(([date, items]) => ({ date, orders: items }));
 }
 
-export function stripInternal(order) {
-  const { _index, ...rest } = order;
-  return rest;
-}
+// История статусов кэшируется отдельно от списка: её запрашивают по одному
+// заказу, когда карточка появляется на экране.
+const historyCache = new Map();
+const HISTORY_TTL_MS = 5 * 60 * 1000;
 
-/** Карточка заказа с историей статусов и актуальной датой доставки. */
-export async function getOrderDetails(requestId) {
-  const stations = await getStations().catch(() => new Map());
-  const report = await getRequestInfo({ requestId });
-  const order = normalizeOrder(report, { stations });
-  if (!order) return null;
-
-  const [history, actual] = await Promise.all([
-    getRequestHistory(requestId).catch(() => null),
-    // actual_info не отдаёт данные для доставленных/отменённых заказов — это не ошибка.
-    getActualInfo(requestId).catch(() => null),
-  ]);
-
-  order.history = (history?.state_history || [])
+function mapHistory(payload) {
+  return (payload?.state_history || [])
     .map((state) => {
       const resolved = resolveStatus(state.status, state.description);
       return {
@@ -140,7 +129,38 @@ export async function getOrderDetails(requestId) {
         reason: state.reason || '',
       };
     })
-    .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)));  // от старого к новому
+}
+
+export async function getOrderHistory(requestId) {
+  const cached = historyCache.get(requestId);
+  if (cached && Date.now() - cached.at < HISTORY_TTL_MS) return cached.items;
+
+  const items = mapHistory(await getRequestHistory(requestId));
+  historyCache.set(requestId, { at: Date.now(), items });
+  return items;
+}
+
+export function stripInternal(order) {
+  const { _index, ...rest } = order;
+  return rest;
+}
+
+/** Карточка заказа с историей статусов и актуальной датой доставки. */
+export async function getOrderDetails(requestId) {
+  const stations = await getStations().catch(() => new Map());
+  const report = await getRequestInfo({ requestId });
+  const order = normalizeOrder(report, { stations });
+  if (!order) return null;
+
+  const [history, actual] = await Promise.all([
+    getOrderHistory(requestId).catch(() => []),
+    // actual_info не отдаёт данные для доставленных/отменённых заказов — это не ошибка.
+    getActualInfo(requestId).catch(() => null),
+  ]);
+
+  // В карточке история показывается сверху вниз: свежие события первыми.
+  order.history = [...history].reverse();
 
   if (actual) {
     order.actual = {

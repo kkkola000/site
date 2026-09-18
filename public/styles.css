@@ -6,6 +6,7 @@
   --line: #e7eaef;
   --accent: #005bff;
   --radius: 20px;
+  --gutter: 40px;
   --shadow: 0 1px 2px rgba(0, 26, 52, .06), 0 8px 24px rgba(0, 26, 52, .04);
 
   --st-awaiting-bg: #fff4e0;  --st-awaiting-fg: #a35c00;
@@ -14,6 +15,10 @@
   --st-return-bg: #ffe9ec;    --st-return-fg: #c0334a;
   --st-done-bg: #e3f7ec;      --st-done-fg: #1a7f4b;
   --st-problem-bg: #ffe3e3;   --st-problem-fg: #c2261a;
+}
+
+@media (max-width: 620px) {
+  :root { --gutter: 20px; }
 }
 
 * { box-sizing: border-box; }
@@ -32,7 +37,7 @@ body {
   top: 0;
   z-index: 20;
   background: var(--bg);
-  padding: 12px 16px 0;
+  padding: 12px var(--gutter) 0;
   border-bottom: 1px solid transparent;
 }
 
@@ -40,8 +45,6 @@ body {
   display: flex;
   gap: 10px;
   align-items: center;
-  max-width: 940px;
-  margin: 0 auto;
 }
 
 .search {
@@ -114,8 +117,7 @@ body {
 .tabs {
   display: flex;
   gap: 8px;
-  max-width: 940px;
-  margin: 12px auto 0;
+  margin-top: 12px;
   padding-bottom: 12px;
   overflow-x: auto;
   scrollbar-width: none;
@@ -141,7 +143,7 @@ body {
 .tab[aria-selected="true"] .tab__count { color: #a9b2bd; }
 
 /* ---------- Список ---------- */
-.content { max-width: 940px; margin: 0 auto; padding: 8px 16px 40px; }
+.content { padding: 8px var(--gutter) 40px; }
 
 .date-head {
   margin: 20px 4px 10px;
@@ -227,8 +229,63 @@ body {
 }
 
 .card__number { color: var(--muted); font-size: 15px; }
+.card__foot-right { display: flex; align-items: center; gap: 12px; }
 .card__price { font-size: 19px; font-weight: 700; white-space: nowrap; }
 .card__carrier { color: var(--muted); font-size: 14px; }
+
+.card__track { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+
+/* Шкала статусов: точки по числу событий, подписаны три из них.
+   Линия рисуется между соседними точками, поэтому у последней её нет. */
+.track {
+  display: flex;
+  align-items: flex-start;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.track__point {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  padding-right: 12px;
+}
+
+.track__point:last-child { flex: 0 1 auto; padding-right: 0; text-align: right; }
+
+.track__point:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 2px;
+  top: 5px;
+  height: 2px;
+  background: var(--line);
+}
+
+.track__dot {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #c6cdd7;
+  margin-left: 2px;
+}
+
+.track__point:last-child .track__dot { margin-left: auto; margin-right: 2px; }
+.track__point.is-current .track__dot { background: var(--accent); }
+.track__point.is-problem .track__dot { background: var(--st-problem-fg); }
+
+.track__text { display: block; margin-top: 8px; }
+.track__label { display: block; font-size: 13px; color: var(--muted); }
+.track__time { display: block; font-size: 12px; color: #9aa5b1; margin-top: 2px; }
+
+/* Текущий статус — то, ради чего смотрят на карточку. */
+.track__point.is-current .track__label { color: var(--text); font-weight: 600; }
+.track__point.is-problem .track__label { color: var(--st-problem-fg); }
 
 .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
 .chip { background: #f0f2f6; color: var(--muted); border-radius: 8px; padding: 4px 10px; font-size: 13px; }
@@ -250,7 +307,7 @@ body {
 .skeleton-card { height: 190px; border-radius: var(--radius); background: linear-gradient(100deg, #eceef2 30%, #f6f7f9 50%, #eceef2 70%); background-size: 200% 100%; animation: shimmer 1.2s infinite; margin-bottom: 12px; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 
-.footer { max-width: 940px; margin: 0 auto; padding: 0 16px 28px; color: var(--muted); font-size: 13px; }
+.footer { padding: 0 var(--gutter) 28px; color: var(--muted); font-size: 13px; }
 
 /* ---------- Карточка заказа ---------- */
 .drawer { position: fixed; inset: 0; z-index: 40; }
@@ -293,7 +350,7 @@ body {
 .timeline li::after { content: ""; position: absolute; left: 4px; top: 17px; bottom: 0; width: 2px; background: var(--line); }
 .timeline li:last-child { padding-bottom: 0; }
 .timeline li:last-child::after { display: none; }
-.timeline__major > div:first-child { font-weight: 600; }
+.timeline__current > div:first-child { font-weight: 600; }
 .timeline__time { color: var(--muted); font-size: 13px; }
 
 .field { display: block; margin-bottom: 12px; }
@@ -309,6 +366,7 @@ body {
   font-size: 15px;
   outline: none;
 }
+select.field__input { cursor: pointer; }
 .field__input:focus { border-color: var(--accent); }
 .field__hint { color: var(--muted); font-size: 13px; line-height: 1.4; }
 
@@ -327,6 +385,7 @@ body {
 
 .btn--ghost { background: #eef0f4; color: var(--text); }
 .btn--danger { background: var(--st-problem-bg); color: var(--st-problem-fg); }
+.btn--small { padding: 8px 14px; font-size: 14px; }
 .btn + .field { display: block; margin-bottom: 12px; }
 .field__label { display: block; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
 .field__input {
@@ -340,6 +399,7 @@ body {
   font-size: 15px;
   outline: none;
 }
+select.field__input { cursor: pointer; }
 .field__input:focus { border-color: var(--accent); }
 .field__hint { color: var(--muted); font-size: 13px; line-height: 1.4; }
 
@@ -348,4 +408,36 @@ body {
 @media (max-width: 620px) {
   .row { grid-template-columns: 1fr; gap: 2px; }
   .card__price { font-size: 18px; }
+
+  /* На телефоне горизонтальная шкала не читается — подписи рвутся по буквам,
+     поэтому оставляем три точки и разворачиваем их в столбец. */
+  .track { display: block; }
+  .track__point:not(.is-labelled) { display: none; }
+
+  .track__point,
+  .track__point:last-child {
+    display: grid;
+    grid-template-columns: 10px 1fr;
+    column-gap: 12px;
+    align-items: start;
+    flex: none;
+    padding: 0 0 14px;
+    text-align: left;
+  }
+
+  .track__point:last-child { padding-bottom: 0; }
+
+  /* Соединитель между точками становится вертикальным. */
+  .track__point:not(:last-child)::after {
+    left: 6px;
+    right: auto;
+    top: 14px;
+    bottom: 2px;
+    width: 2px;
+    height: auto;
+  }
+
+  .track__dot,
+  .track__point:last-child .track__dot { margin: 2px 0 0; }
+  .track__text { margin-top: 0; }
 }

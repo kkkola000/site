@@ -58,6 +58,15 @@ function formatDateTime(iso) {
   return date.toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 }
 
+function formatShort(iso) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date
+    .toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    .replace('.,', ',');
+}
+
 function formatInterval(interval) {
   if (!interval || (!interval.from && !interval.to)) return '';
   const time = (iso) => (iso ? new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
@@ -84,18 +93,51 @@ function renderTabs() {
 
 function itemRow(item) {
   return `<div class="item">
-    <div>
-      <div class="item__name">${escapeHtml(item.name)}</div>
-      ${item.article ? `<div class="item__article">${escapeHtml(item.article)}</div>` : ''}
-    </div>
+    <div class="item__name">${escapeHtml(item.name)}</div>
     <div class="item__count">${item.count} шт${item.refusedCount ? ` · отказ ${item.refusedCount}` : ''}</div>
   </div>`;
 }
 
+// Подписываем три точки: первую, последнюю (текущий статус) и между ними —
+// последний основной статус цепочки. На узком экране остаются только они.
+function labelledPoints(history) {
+  const last = history.length - 1;
+  const labelled = new Set([0, last]);
+  if (history.length > 2) {
+    const middle = history.findLastIndex((item, index) => item.major && index > 0 && index < last);
+    labelled.add(middle > 0 ? middle : Math.floor(last / 2));
+  }
+  return labelled;
+}
+
+function trackHtml(history) {
+  if (!history || history.length < 2) return '';
+  const last = history.length - 1;
+  const labelled = labelledPoints(history);
+
+  const points = history.map((item, index) => {
+    const classes = ['track__point'];
+    if (labelled.has(index)) classes.push('is-labelled');
+    if (index === last) classes.push('is-current');
+    if (item.problem) classes.push('is-problem');
+
+    const label = labelled.has(index)
+      ? `<span class="track__text">
+           <span class="track__label">${escapeHtml(item.description || item.label)}</span>
+           <span class="track__time">${escapeHtml(formatShort(item.at))}</span>
+         </span>`
+      : '';
+
+    return `<li class="${classes.join(' ')}" title="${escapeHtml(`${item.description || item.label} · ${formatShort(item.at)}`)}">
+      <span class="track__dot"></span>${label}
+    </li>`;
+  });
+
+  return `<ol class="track">${points.join('')}</ol>`;
+}
+
 function orderCard(order) {
   const badgeClass = order.status.problem ? 'problem' : order.status.group;
-  const shipmentAddress = order.shipment.address || order.shipment.name || order.shipment.stationId || '—';
-  const deliveryAddress = order.delivery.address || order.delivery.name || '—';
 
   const chips = [
     order.partialRefusal ? '<span class="chip chip--warn">Частичный невыкуп</span>' : '',
@@ -109,21 +151,16 @@ function orderCard(order) {
     <div class="card__items">${order.items.map(itemRow).join('') || '<div class="item"><div class="item__name">Состав заказа не передан</div><div></div></div>'}</div>
     <div class="card__rows">
       <div class="row"><span class="row__label">Трек-номер</span><span class="row__value">${escapeHtml(order.trackNumber || '—')}</span></div>
-      <div class="row"><span class="row__label">Адрес отгрузки</span><span class="row__value">${escapeHtml(shipmentAddress)}${
-        order.shipment.interval ? `<div class="row__hint">${escapeHtml(formatInterval(order.shipment.interval))}</div>` : ''
-      }</span></div>
-      <div class="row"><span class="row__label">Адрес доставки</span><span class="row__value">${escapeHtml(deliveryAddress)}${
-        order.delivery.interval ? `<div class="row__hint">${escapeHtml(formatInterval(order.delivery.interval))}</div>` : ''
-      }</span></div>
     </div>
     ${chips ? `<div class="chips">${chips}</div>` : ''}
     <div class="card__foot">
-      <div>
-        <div class="card__number">${escapeHtml(order.orderNumber)}</div>
-        <div class="card__carrier">Доставка Яндекс</div>
+      <div class="card__number">${escapeHtml(order.orderNumber)}</div>
+      <div class="card__foot-right">
+        <div class="card__price">${formatPrice(order.totalPrice, order.currency)}</div>
+        <button class="btn btn--small btn--ghost" type="button" data-print="${escapeHtml(order.id)}">Печать</button>
       </div>
-      <div class="card__price">${formatPrice(order.totalPrice, order.currency)}</div>
     </div>
+    <div class="card__track" data-track="${escapeHtml(order.id)}"></div>
   </article>`;
 }
 
@@ -160,6 +197,45 @@ function renderList() {
 
 // ---------- Загрузка ----------
 
+// Историю запрашиваем по одному заказу и только когда карточка видна:
+// иначе на каждое обновление списка пришлось бы дёргать API по числу заказов.
+const historyCache = new Map();
+
+const trackObserver = new IntersectionObserver(
+  (entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const node = entry.target;
+      trackObserver.unobserve(node);
+      fillTrack(node);
+    }
+  },
+  { rootMargin: '200px' },
+);
+
+async function fillTrack(node) {
+  const id = node.dataset.track;
+  if (!id || node.dataset.filled) return;
+  node.dataset.filled = '1';
+
+  try {
+    let history = historyCache.get(id);
+    if (!history) {
+      const response = await fetch(api(`/api/orders/${encodeURIComponent(id)}/history`));
+      if (!response.ok) return;
+      history = (await response.json()).history || [];
+      historyCache.set(id, history);
+    }
+    node.innerHTML = trackHtml(history);
+  } catch {
+    // История — дополнение к карточке: без неё карточка остаётся рабочей.
+  }
+}
+
+function observeTracks() {
+  for (const node of el.list.querySelectorAll('[data-track]')) trackObserver.observe(node);
+}
+
 async function load({ force = false, showSkeleton = false } = {}) {
   if (showSkeleton) {
     el.skeleton.hidden = false;
@@ -184,6 +260,7 @@ async function load({ force = false, showSkeleton = false } = {}) {
 
     renderTabs();
     renderList();
+    observeTracks();
 
     el.banner.hidden = !data.error;
     if (data.error) el.banner.textContent = `Данные могут быть неактуальны: ${data.error}`;
@@ -212,7 +289,7 @@ function detailPanels(order) {
 
   const history = (order.history || [])
     .map(
-      (state_) => `<li${state_.major ? ' class="timeline__major"' : ''}>
+      (state_, index) => `<li${index === 0 ? ' class="timeline__current"' : ''}>
         <div>${escapeHtml(state_.description || state_.label)}</div>
         <div class="timeline__time">${escapeHtml(formatDateTime(state_.at))}${state_.reason ? ` · ${escapeHtml(state_.reason)}` : ''}</div>
       </li>`,
@@ -264,12 +341,23 @@ function detailPanels(order) {
       </div>
     </div>
 
+    <div class="panel">
+      <h3>Ярлык</h3>
+      <label class="field">
+        <span class="field__label">Формат печати</span>
+        <select class="field__input" id="label-size">
+          ${(order.labelSizes || []).map((size) => `<option value="${escapeHtml(size.value)}"${size.value === order.labelSize ? ' selected' : ''}>${escapeHtml(size.title)}</option>`).join('')}
+        </select>
+      </label>
+      <div class="field__hint">По умолчанию используется формат из настроек панели.</div>
+      <div style="margin-top:12px"><button class="btn" type="button" id="print-label">Печать ярлыка</button></div>
+    </div>
+
     ${order.places.length ? `<div class="panel">
       <h3>Грузоместа</h3>
       <div class="card__rows">
         ${order.places.map((place) => `<div class="row"><span class="row__label">${escapeHtml(place.barcode)}</span><span class="row__value">${place.weightGross ? `${(place.weightGross / 1000).toFixed(2)} кг` : ''} ${place.dims.some(Boolean) ? `· ${place.dims.join('×')} см` : ''}</span></div>`).join('')}
       </div>
-      <div style="margin-top:12px"><a class="btn" href="${BASE}/api/orders/${encodeURIComponent(order.id)}/label" target="_blank" rel="noopener">Скачать ярлык</a></div>
     </div>` : ''}
 
     ${history ? `<div class="panel"><h3>История статусов</h3><ul class="timeline">${history}</ul></div>` : ''}
@@ -289,6 +377,12 @@ function settingsForm(data) {
         <span class="field__label">Токен API (Bearer)</span>
         <input class="field__input" type="password" name="token" autocomplete="off" spellcheck="false"
                placeholder="${data.tokenSet ? 'Оставьте пустым, чтобы не менять' : 'y2_...'}">
+      </label>
+      <label class="field">
+        <span class="field__label">Формат ярлыка по умолчанию</span>
+        <select class="field__input" name="labelSize">
+          ${(data.labelSizes || []).map((size) => `<option value="${escapeHtml(size.value)}"${size.value === data.labelSize ? ' selected' : ''}>${escapeHtml(size.title)}</option>`).join('')}
+        </select>
       </label>
       <label class="field">
         <span class="field__label">Склады отгрузки, через запятую (необязательно)</span>
@@ -335,7 +429,7 @@ async function openSettings() {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const token = form.token.value.trim();
-    const payload = { stationIds: form.stationIds.value };
+    const payload = { stationIds: form.stationIds.value, labelSize: form.labelSize.value };
     // Пустое поле означает «не менять», а не «стереть токен».
     if (token) payload.token = token;
 
@@ -384,6 +478,11 @@ async function openSettings() {
   });
 }
 
+function printLabel(id, size) {
+  const params = size ? `?size=${encodeURIComponent(size)}` : '';
+  window.open(api(`/api/orders/${encodeURIComponent(id)}/label${params}`), '_blank', 'noopener');
+}
+
 async function openOrder(id) {
   el.drawer.hidden = false;
   el.drawerTitle.textContent = 'Заказ';
@@ -394,8 +493,19 @@ async function openOrder(id) {
     const response = await fetch(api(`/api/orders/${encodeURIComponent(id)}`));
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || `Ошибка ${response.status}`);
+    // Формат печати берём из настроек панели, но в карточке его можно поменять.
+    const settings = await (await fetch(api('/api/settings'))).json().catch(() => ({}));
     el.drawerTitle.textContent = data.order.orderNumber;
-    el.drawerBody.innerHTML = detailPanels(data.order);
+    el.drawerBody.innerHTML = detailPanels({
+      ...data.order,
+      labelSize: settings.labelSize,
+      labelSizes: settings.labelSizes || [],
+    });
+
+    const printButton = document.getElementById('print-label');
+    if (printButton) {
+      printButton.addEventListener('click', () => printLabel(id, document.getElementById('label-size').value));
+    }
   } catch (err) {
     el.drawerBody.innerHTML = `<div class="banner">${escapeHtml(err.message)}</div>`;
   }
@@ -447,6 +557,15 @@ el.list.addEventListener('click', (event) => {
     openSettings();
     return;
   }
+
+  const print = event.target.closest('[data-print]');
+  if (print) {
+    // Клик по кнопке печати не должен открывать карточку заказа.
+    event.stopPropagation();
+    printLabel(print.dataset.print);
+    return;
+  }
+
   const card = event.target.closest('[data-id]');
   if (card) openOrder(card.dataset.id);
 });

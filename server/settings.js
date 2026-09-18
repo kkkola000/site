@@ -8,17 +8,33 @@ import { ROOT, config } from './config.js';
 
 const FILE = process.env.SETTINGS_FILE || resolve(ROOT, 'config/settings.json');
 
+// Размеры ярлыка, которые принимает метод generate-labels.
+export const LABEL_SIZES = [
+  { value: '58x40', title: '58 × 40 мм (термопринтер)' },
+  { value: '58x60', title: '58 × 60 мм' },
+  { value: '75x120', title: '75 × 120 мм' },
+  { value: '100x150', title: '100 × 150 мм' },
+  { value: '210x297', title: 'A4 (210 × 297 мм)' },
+];
+
+export const DEFAULT_LABEL_SIZE = '58x40';
+
+export function isLabelSize(value) {
+  return LABEL_SIZES.some((size) => size.value === value);
+}
+
 let cache = null;
 
 function load() {
   if (cache) return cache;
-  cache = { token: '', stationIds: [], updatedAt: '' };
+  cache = { token: '', stationIds: [], labelSize: DEFAULT_LABEL_SIZE, updatedAt: '' };
   if (existsSync(FILE)) {
     try {
       const raw = JSON.parse(readFileSync(FILE, 'utf8'));
       cache = {
         token: String(raw.token || '').trim(),
         stationIds: Array.isArray(raw.stationIds) ? raw.stationIds.filter(Boolean).map(String) : [],
+        labelSize: isLabelSize(raw.labelSize) ? raw.labelSize : DEFAULT_LABEL_SIZE,
         updatedAt: String(raw.updatedAt || ''),
       };
     } catch (err) {
@@ -28,7 +44,7 @@ function load() {
   return cache;
 }
 
-export function saveSettings({ token, stationIds } = {}) {
+export function saveSettings({ token, stationIds, labelSize } = {}) {
   const current = load();
   const next = {
     // Пустая строка — осознанная очистка, undefined — поле не передавали.
@@ -39,6 +55,8 @@ export function saveSettings({ token, stationIds } = {}) {
         : (Array.isArray(stationIds) ? stationIds : String(stationIds).split(','))
             .map((id) => String(id).trim())
             .filter(Boolean),
+    // Неизвестный размер игнорируем: API примет только значения из списка.
+    labelSize: isLabelSize(labelSize) ? labelSize : current.labelSize,
     updatedAt: new Date().toISOString(),
   };
 
@@ -60,6 +78,11 @@ export function effectiveToken() {
 export function effectiveStationIds() {
   const own = load().stationIds;
   return own.length ? own : config.yandex.stationIds;
+}
+
+export function effectiveLabelSize() {
+  const value = load().labelSize;
+  return isLabelSize(value) ? value : DEFAULT_LABEL_SIZE;
 }
 
 export function tokenSource() {
@@ -84,6 +107,8 @@ export function settingsView() {
     tokenMask: maskToken(token),
     tokenSource: tokenSource(),
     stationIds: effectiveStationIds(),
+    labelSize: effectiveLabelSize(),
+    labelSizes: LABEL_SIZES,
     updatedAt: settings.updatedAt,
     apiBase: config.yandex.base,
   };
