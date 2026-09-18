@@ -257,9 +257,9 @@ body {
 .track__point:not(:last-child)::after {
   content: "";
   position: absolute;
-  left: 14px;
+  left: 18px;
   right: 2px;
-  top: 5px;
+  top: 6px;
   height: 2px;
   background: var(--line);
 }
@@ -268,22 +268,30 @@ body {
   position: relative;
   z-index: 1;
   display: block;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  background: #c6cdd7;
+  background: #d7dce3;
   margin-left: 2px;
 }
 
 .track__point:last-child .track__dot { margin-left: auto; margin-right: 2px; }
+
+/* Пройденные и текущий этап — синие, будущие остаются серыми. */
+.track__point.is-done .track__dot,
 .track__point.is-current .track__dot { background: var(--accent); }
-.track__point.is-problem .track__dot { background: var(--st-problem-fg); }
+.track__point.is-current .track__dot { box-shadow: 0 0 0 4px rgba(0, 91, 255, .15); }
+.track__point.is-problem .track__dot { background: var(--st-problem-fg); box-shadow: 0 0 0 4px rgba(194, 38, 26, .15); }
+
+/* Линия до пройденного этапа тоже закрашивается. */
+.track__point.is-done::after { background: var(--accent); }
 
 .track__text { display: block; margin-top: 8px; }
 .track__label { display: block; font-size: 13px; color: var(--muted); }
 .track__time { display: block; font-size: 12px; color: #9aa5b1; margin-top: 2px; }
 
 /* Текущий статус — то, ради чего смотрят на карточку. */
+.track__point.is-done .track__label { color: var(--text); }
 .track__point.is-current .track__label { color: var(--text); font-weight: 600; }
 .track__point.is-problem .track__label { color: var(--st-problem-fg); }
 
@@ -410,14 +418,13 @@ select.field__input { cursor: pointer; }
   .card__price { font-size: 18px; }
 
   /* На телефоне горизонтальная шкала не читается — подписи рвутся по буквам,
-     поэтому оставляем три точки и разворачиваем их в столбец. */
+     поэтому те же этапы разворачиваем в столбец. */
   .track { display: block; }
-  .track__point:not(.is-labelled) { display: none; }
 
   .track__point,
   .track__point:last-child {
     display: grid;
-    grid-template-columns: 10px 1fr;
+    grid-template-columns: 12px 1fr;
     column-gap: 12px;
     align-items: start;
     flex: none;
@@ -429,9 +436,9 @@ select.field__input { cursor: pointer; }
 
   /* Соединитель между точками становится вертикальным. */
   .track__point:not(:last-child)::after {
-    left: 6px;
+    left: 7px;
     right: auto;
-    top: 14px;
+    top: 16px;
     bottom: 2px;
     width: 2px;
     height: auto;

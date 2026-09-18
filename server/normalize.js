@@ -175,6 +175,7 @@ export function normalizeOrder(report, { stations = new Map() } = {}) {
     status: {
       code: status.code,
       group: status.group,
+      stage: status.stage,
       label: status.label,
       description: status.description,
       problem: status.problem,

@@ -21,6 +21,63 @@ export const TABS = [
 
 export const TAB_IDS = TABS.map((t) => t.id);
 
+// Этапы для шкалы в карточке: фиксированная цепочка, которая заполняется
+// по мере движения заказа. Четвёртый этап зависит от пути: обычный заказ
+// ждёт получателя, возвратный едет обратно в магазин.
+export const STAGES = [
+  { id: 'created', title: 'Создан' },
+  { id: 'sorting', title: 'Принят в СЦ' },
+  { id: 'transit', title: 'В пути' },
+  { id: 'ready', title: 'Готов к вручению', returnTitle: 'Возврат' },
+  { id: 'done', title: 'Завершён' },
+];
+
+const STAGE_BY_STATUS = {
+  VALIDATING_ERROR: 'created',
+  CREATED: 'created',
+  DELIVERY_PROCESSING_STARTED: 'created',
+  SORTING_CENTER_LOADED: 'created',
+
+  SORTING_CENTER_AT_START: 'sorting',
+  SORTING_CENTER_PREPARED: 'sorting',
+  SORTING_CENTER_TRANSMITTED: 'sorting',
+
+  DELIVERY_AT_START: 'transit',
+  DELIVERY_AT_START_SORT: 'transit',
+  DELIVERY_TRANSPORTATION: 'transit',
+  DELIVERY_TRANSPORTATION_RECIPIENT: 'transit',
+  DELIVERY_TIME_INTERVALS_UPDATED: 'transit',
+  DELIVERY_ATTEMPT_FAILED: 'transit',
+
+  DELIVERY_ARRIVED_PICKUP_POINT: 'ready',
+  CONFIRMATION_CODE_RECEIVED: 'ready',
+  PARTICULARLY_DELIVERED: 'ready',
+
+  // Возврат занимает то же место в цепочке, но подписывается иначе.
+  SORTING_CENTER_RETURN_RETURNED: 'return',
+  RETURN_TRANSPORTATION_STARTED: 'return',
+  RETURN_ARRIVED_DELIVERY: 'return',
+  RETURN_READY_FOR_PICKUP: 'return',
+
+  DELIVERY_TRANSMITTED_TO_RECIPIENT: 'done',
+  DELIVERY_DELIVERED: 'done',
+  RETURN_RETURNED: 'done',
+  CANCELLED: 'done',
+};
+
+// Этап для статуса, которого ещё нет в каталоге, — по разделу панели.
+const STAGE_BY_GROUP = {
+  awaiting: 'created',
+  transit: 'transit',
+  ready: 'ready',
+  return: 'return',
+  done: 'done',
+};
+
+export function stageOf(code, group) {
+  return STAGE_BY_STATUS[code] || STAGE_BY_GROUP[group] || 'created';
+}
+
 const STATUS_MAP = {
   // --- До передачи в сортировочный центр ---
   VALIDATING_ERROR: { group: 'awaiting', label: 'Не подтверждён в СЦ', problem: true },
@@ -85,6 +142,7 @@ export function resolveStatus(status, description) {
     return {
       code,
       group: known.group,
+      stage: stageOf(code, known.group),
       label: known.label,
       description: description || '',
       major: Boolean(known.major),
@@ -95,12 +153,21 @@ export function resolveStatus(status, description) {
   const problem = PROBLEM.test(code);
   for (const [pattern, fallback] of PATTERNS) {
     if (pattern.test(code)) {
-      return { code, group: fallback.group, label: fallback.label, description: description || '', major: false, problem };
+      return {
+        code,
+        group: fallback.group,
+        stage: stageOf(code, fallback.group),
+        label: fallback.label,
+        description: description || '',
+        major: false,
+        problem,
+      };
     }
   }
   return {
     code,
     group: 'awaiting',
+    stage: 'created',
     label: description || code || 'Без статуса',
     description: description || '',
     major: false,

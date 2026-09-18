@@ -7,6 +7,8 @@ const state = {
   tab: 'all',
   q: '',
   tabs: [],
+  stages: [],
+  orders: new Map(),
   counts: {},
   groups: [],
   loading: false,
@@ -98,38 +100,55 @@ function itemRow(item) {
   </div>`;
 }
 
-// Подписываем три точки: первую, последнюю (текущий статус) и между ними —
-// последний основной статус цепочки. На узком экране остаются только они.
-function labelledPoints(history) {
-  const last = history.length - 1;
-  const labelled = new Set([0, last]);
-  if (history.length > 2) {
-    const middle = history.findLastIndex((item, index) => item.major && index > 0 && index < last);
-    labelled.add(middle > 0 ? middle : Math.floor(last / 2));
-  }
-  return labelled;
+// Шкала этапов: цепочка фиксированной длины, пройденные этапы заливаются
+// синим. Четвёртый этап подписывается «Возврат», если заказ поехал обратно.
+function buildStages(order, history) {
+  const stages = state.stages;
+  if (!stages.length) return [];
+
+  const passed = new Set((history || []).map((item) => item.stage));
+  const isReturn = order.status.stage === 'return' || passed.has('return');
+  const currentStage = order.status.stage === 'return' ? 'ready' : order.status.stage;
+  const currentIndex = Math.max(0, stages.findIndex((stage) => stage.id === currentStage));
+
+  // Время этапа — момент первого события, которое в него попало.
+  const timeOf = (id) => {
+    const wanted = id === 'ready' && isReturn ? ['ready', 'return'] : [id];
+    const event = (history || []).find((item) => wanted.includes(item.stage));
+    return event ? event.at : '';
+  };
+
+  return stages.map((stage, index) => {
+    let title = stage.id === 'ready' && isReturn ? stage.returnTitle || stage.title : stage.title;
+    // У последнего этапа подпись уточняется: отменён, возвращён или доставлен.
+    if (stage.id === 'done' && index === currentIndex) title = order.status.label;
+
+    return {
+      title,
+      time: timeOf(stage.id),
+      done: index < currentIndex,
+      current: index === currentIndex,
+      problem: index === currentIndex && order.status.problem,
+    };
+  });
 }
 
-function trackHtml(history) {
-  if (!history || history.length < 2) return '';
-  const last = history.length - 1;
-  const labelled = labelledPoints(history);
+function trackHtml(order, history) {
+  const stages = buildStages(order, history);
+  if (!stages.length) return '';
 
-  const points = history.map((item, index) => {
+  const points = stages.map((stage) => {
     const classes = ['track__point'];
-    if (labelled.has(index)) classes.push('is-labelled');
-    if (index === last) classes.push('is-current');
-    if (item.problem) classes.push('is-problem');
+    if (stage.done) classes.push('is-done');
+    if (stage.current) classes.push('is-current');
+    if (stage.problem) classes.push('is-problem');
 
-    const label = labelled.has(index)
-      ? `<span class="track__text">
-           <span class="track__label">${escapeHtml(item.description || item.label)}</span>
-           <span class="track__time">${escapeHtml(formatShort(item.at))}</span>
-         </span>`
-      : '';
-
-    return `<li class="${classes.join(' ')}" title="${escapeHtml(`${item.description || item.label} · ${formatShort(item.at)}`)}">
-      <span class="track__dot"></span>${label}
+    return `<li class="${classes.join(' ')}">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">${escapeHtml(stage.title)}</span>
+        ${stage.time ? `<span class="track__time">${escapeHtml(formatShort(stage.time))}</span>` : ''}
+      </span>
     </li>`;
   });
 
@@ -227,7 +246,8 @@ async function fillTrack(node) {
       history = (await response.json()).history || [];
       historyCache.set(id, history);
     }
-    node.innerHTML = trackHtml(history);
+    const order = state.orders.get(id);
+    if (order) node.innerHTML = trackHtml(order, history);
   } catch {
     // История — дополнение к карточке: без неё карточка остаётся рабочей.
   }
@@ -255,8 +275,10 @@ async function load({ force = false, showSkeleton = false } = {}) {
     if (!response.ok) throw new Error(data.error || `Ошибка ${response.status}`);
 
     state.tabs = data.tabs;
+    state.stages = data.stages || [];
     state.counts = data.counts;
     state.groups = data.groups;
+    state.orders = new Map(data.groups.flatMap((group) => group.orders).map((order) => [order.id, order]));
     state.needsToken = Boolean(data.needsToken);
 
     renderTabs();

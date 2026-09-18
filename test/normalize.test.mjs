@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeOrder, searchIndex, formatAddress } from '../server/normalize.js';
-import { resolveStatus, TABS } from '../server/statuses.js';
+import { resolveStatus, TABS, STAGES } from '../server/statuses.js';
 import { reportPickup, reportCourier } from './fixtures.mjs';
 
 const stations = new Map([
@@ -154,4 +154,45 @@ test('полный и частичный невыкуп различаются',
   assert.equal(build([item(2, 2), item(1, 0)]).refusal, 'partial');
   // Забрали часть единиц одного товара.
   assert.equal(build([item(3, 1)]).refusal, 'partial');
+});
+
+test('этапы шкалы: каждый статус попадает в свой этап', () => {
+  const cases = {
+    CREATED: 'created',
+    VALIDATING_ERROR: 'created',
+    SORTING_CENTER_LOADED: 'created',
+
+    SORTING_CENTER_AT_START: 'sorting',
+    SORTING_CENTER_TRANSMITTED: 'sorting',
+
+    DELIVERY_TRANSPORTATION: 'transit',
+    DELIVERY_ATTEMPT_FAILED: 'transit',
+
+    DELIVERY_ARRIVED_PICKUP_POINT: 'ready',
+    PARTICULARLY_DELIVERED: 'ready',
+
+    RETURN_TRANSPORTATION_STARTED: 'return',
+    RETURN_READY_FOR_PICKUP: 'return',
+
+    DELIVERY_DELIVERED: 'done',
+    RETURN_RETURNED: 'done',
+    CANCELLED: 'done',
+  };
+
+  for (const [status, stage] of Object.entries(cases)) {
+    assert.equal(resolveStatus(status, '').stage, stage, status);
+  }
+
+  // Незнакомый статус получает этап по разделу, а не теряется.
+  assert.equal(resolveStatus('DELIVERY_SOMETHING_NEW', '').stage, 'transit');
+  assert.equal(resolveStatus('RETURN_SOMETHING_NEW', '').stage, 'return');
+});
+
+test('этапы идут по порядку и заканчиваются завершением', () => {
+  const ids = STAGES.map((stage) => stage.id);
+  assert.deepEqual(ids, ['created', 'sorting', 'transit', 'ready', 'done']);
+  assert.equal(STAGES[0].title, 'Создан');
+  assert.equal(STAGES.at(-1).title, 'Завершён');
+  // У этапа перед завершением своя подпись для возвратных заказов.
+  assert.equal(STAGES[3].returnTitle, 'Возврат');
 });

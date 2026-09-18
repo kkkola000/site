@@ -3,7 +3,7 @@ import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import { config, ROOT, authEnabled } from './config.js';
-import { TABS, isKnownTab } from './statuses.js';
+import { TABS, STAGES, isKnownTab } from './statuses.js';
 import {
   getOrders,
   filterOrders,
@@ -171,6 +171,7 @@ async function handleApi(req, res, url, pathname) {
     if (!effectiveToken()) {
       sendJson(res, 200, {
         tabs: TABS,
+        stages: STAGES,
         counts: Object.fromEntries(TABS.map((tab) => [tab.id, 0])),
         groups: [],
         total: 0,
@@ -185,6 +186,7 @@ async function handleApi(req, res, url, pathname) {
     const filtered = filterOrders(snapshot.orders, { tab, q });
     sendJson(res, 200, {
       tabs: TABS,
+      stages: STAGES,
       counts: countByTab(snapshot.orders, { q }),
       groups: groupByDate(filtered).map((group) => ({
         date: group.date,
