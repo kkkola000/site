@@ -118,10 +118,12 @@ function buildStages(order, history) {
     return event ? event.at : '';
   };
 
+  // Заказ, закрытый не выдачей (отменён, возвращён), подписывается по факту.
+  const finishedOtherwise = !['DELIVERY_DELIVERED', 'DELIVERY_TRANSMITTED_TO_RECIPIENT'].includes(order.status.code);
+
   return stages.map((stage, index) => {
     let title = stage.id === 'ready' && isReturn ? stage.returnTitle || stage.title : stage.title;
-    // У последнего этапа подпись уточняется: отменён, возвращён или доставлен.
-    if (stage.id === 'done' && index === currentIndex) title = order.status.label;
+    if (stage.id === 'done' && index === currentIndex && finishedOtherwise) title = order.status.label;
 
     return {
       title,

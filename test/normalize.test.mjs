@@ -158,12 +158,12 @@ test('полный и частичный невыкуп различаются',
 
 test('этапы шкалы: каждый статус попадает в свой этап', () => {
   const cases = {
-    CREATED: 'created',
-    VALIDATING_ERROR: 'created',
-    SORTING_CENTER_LOADED: 'created',
+    CREATED: 'awaiting',
+    VALIDATING_ERROR: 'awaiting',
+    SORTING_CENTER_LOADED: 'awaiting',
 
-    SORTING_CENTER_AT_START: 'sorting',
-    SORTING_CENTER_TRANSMITTED: 'sorting',
+    SORTING_CENTER_AT_START: 'transit',
+    SORTING_CENTER_TRANSMITTED: 'transit',
 
     DELIVERY_TRANSPORTATION: 'transit',
     DELIVERY_ATTEMPT_FAILED: 'transit',
@@ -188,11 +188,19 @@ test('этапы шкалы: каждый статус попадает в св�
   assert.equal(resolveStatus('RETURN_SOMETHING_NEW', '').stage, 'return');
 });
 
-test('этапы идут по порядку и заканчиваются завершением', () => {
-  const ids = STAGES.map((stage) => stage.id);
-  assert.deepEqual(ids, ['created', 'sorting', 'transit', 'ready', 'done']);
-  assert.equal(STAGES[0].title, 'Создан');
-  assert.equal(STAGES.at(-1).title, 'Завершён');
-  // У этапа перед завершением своя подпись для возвратных заказов.
-  assert.equal(STAGES[3].returnTitle, 'Возврат');
+test('этапы повторяют разделы панели', () => {
+  assert.deepEqual(
+    STAGES.map((stage) => stage.id),
+    ['awaiting', 'transit', 'ready', 'done'],
+  );
+  assert.deepEqual(
+    STAGES.map((stage) => stage.title),
+    ['Ожидает отгрузки', 'В пути', 'Готов к вручению', 'Выдан'],
+  );
+  // У этапа перед выдачей своя подпись для возвратных заказов.
+  assert.equal(STAGES[2].returnTitle, 'Возврат');
+
+  // Каждый этап соответствует разделу с тем же идентификатором.
+  const tabs = TABS.map((tab) => tab.id);
+  for (const stage of STAGES) assert.ok(tabs.includes(stage.id), stage.id);
 });
