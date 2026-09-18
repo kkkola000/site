@@ -281,6 +281,30 @@ test('токен вводится в панели: сохранение, мас�
     assert.match(readFileSync(settingsFile, 'utf8'), /"token": "test-token"/);
   });
 
+  await t.test('токен удаляется явно, и панель возвращается к экрану подключения', async () => {
+    const cleared = await json('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: '' }),
+    });
+    assert.equal(cleared.tokenSet, false);
+    assert.equal(cleared.tokenSource, 'none');
+
+    // В файле настроек токена не осталось.
+    assert.match(readFileSync(settingsFile, 'utf8'), /"token": ""/);
+
+    const orders = await json('/api/orders');
+    assert.equal(orders.needsToken, true);
+    assert.equal(orders.total, 0);
+
+    // Возвращаем токен для следующего шага.
+    await json('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: TOKEN }),
+    });
+  });
+
   await t.test('пустое поле токена не стирает сохранённый', async () => {
     await json('/api/settings', {
       method: 'POST',

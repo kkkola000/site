@@ -87,15 +87,15 @@ while [[ $# -gt 0 ]]; do
     --token) TOKEN="${2:-}"; shift 2 ;;
     --stations) STATION_IDS="${2:-}"; shift 2 ;;
     --domain) DOMAIN="${2:-}"; shift 2 ;;
-    --base-path) BASE_PATH="${2:-}"; shift 2 ;;
+    --base-path) BASE_PATH="${2:-}"; BASE_PATH_SET=1; shift 2 ;;
     --nginx) WITH_NGINX=1; shift ;;
-    --port) PORT="${2:-}"; shift 2 ;;
+    --port) PORT="${2:-}"; PORT_SET=1; shift 2 ;;
     --dir) DIR="${2:-}"; shift 2 ;;
     --user) RUN_USER="${2:-}"; shift 2 ;;
     --auth-user) AUTH_USER="${2:-}"; shift 2 ;;
     --auth-password) AUTH_PASSWORD="${2:-}"; shift 2 ;;
     --allow-subnet) ALLOW_SUBNETS="${ALLOW_SUBNETS:+$ALLOW_SUBNETS,}${2:-}"; shift 2 ;;
-    --bind) BIND_HOST="${2:-}"; shift 2 ;;
+    --bind) BIND_HOST="${2:-}"; BIND_SET=1; shift 2 ;;
     --attach-site) ATTACH_SITE="${2:-auto}"; shift 2 ;;
     --detach-site) DETACH_SITE=1; shift ;;
     --list-sites) LIST_SITES=1; shift ;;
@@ -121,6 +121,38 @@ if [[ "${DEPLOY_LIB_ONLY:-0}" != "1" ]]; then
     fi
   fi
 fi
+
+# ---------- 0. Уже настроенная установка ----------
+# Повторный запуск — это обновление: значения, которые не переданы флагами,
+# берём из существующего .env, иначе обновление сбросило бы порт, подпуть
+# и адрес прослушивания к значениям по умолчанию.
+load_existing_config() {
+  local env_file="$DIR/.env"
+  [[ -f "$env_file" ]] || return 0
+
+  local saved
+  saved="$(read_env "$env_file" PORT)"
+  [[ "${PORT_SET:-0}" -eq 1 || -z "$saved" ]] || PORT="$saved"
+
+  # Пустой подпуть — тоже значение: панель в корне сайта.
+  if [[ "${BASE_PATH_SET:-0}" -ne 1 ]] && grep -q '^BASE_PATH=' "$env_file"; then
+    BASE_PATH="$(read_env "$env_file" BASE_PATH)"
+  fi
+
+  saved="$(read_env "$env_file" HOST)"
+  if [[ "${BIND_SET:-0}" -ne 1 && -n "$saved" && "$saved" != "127.0.0.1" ]]; then
+    BIND_HOST="$saved"
+  fi
+
+  # Куда панель была встроена в nginx: обновление возвращает блок на место,
+  # если конфиг сайта успел пересоздать чужой скрипт.
+  SAVED_SITE="$(read_env "$env_file" NGINX_SITE)"
+  saved="$(read_env "$env_file" NGINX_DOMAIN)"
+  [[ -n "$DOMAIN" || -z "$saved" ]] || DOMAIN="$saved"
+
+  UPDATING=1
+  ok "обновление: порт ${PORT}${BASE_PATH:+, путь ${BASE_PATH}}${BIND_HOST:+, адрес ${BIND_HOST}}"
+}
 
 # ---------- 0. Соседняя панель Ozon Pack ----------
 # Ozon Pack держит свой каталог, службу, порт и сайт nginx. Задача — убедиться,
@@ -202,18 +234,35 @@ install_files() {
   id -u "$RUN_USER" >/dev/null 2>&1 || useradd --system --home-dir "$DIR" --shell /usr/sbin/nologin "$RUN_USER"
   mkdir -p "$DIR"
 
-  # Копируем только рабочие файлы: без .git, node_modules и локального .env.
+  sync_files "$SRC" "$DIR"
+  ok "Код в $DIR"
+}
+
+# Данные установки, которые не приходят из репозитория и должны пережить
+# обновление: настройки панели (в них токен API), справочник адресов и .env.
+KEEP_FILES=(.env config/settings.json config/stations.json)
+
+sync_files() {
+  local src="$1" dest="$2" keep=() path
+  mkdir -p "$dest/config"
+
+  for path in "${KEEP_FILES[@]}"; do keep+=(--exclude "$path"); done
+
   if command -v rsync >/dev/null; then
-    rsync -a --delete \
-      --exclude '.git' --exclude 'node_modules' --exclude '.env' --exclude 'config/stations.json' \
-      "$SRC"/ "$DIR"/
+    # --delete убирает файлы, удалённые из репозитория, поэтому список
+    # исключений здесь обязателен: без него обновление стёрло бы токен.
+    rsync -a --delete --exclude '.git' --exclude 'node_modules' "${keep[@]}" "$src"/ "$dest"/
   else
-    for path in server public config deploy package.json .env.example README.md; do
-      [[ -e "$SRC/$path" ]] && cp -a "$SRC/$path" "$DIR/"
+    for path in server public config deploy scripts test package.json .env.example README.md; do
+      [[ -e "$src/$path" ]] || continue
+      if [[ "$path" == "config" ]]; then
+        cp -a "$src/config/." "$dest/config/"     # примеры конфигов, без своих файлов
+      else
+        rm -rf "${dest:?}/$path"
+        cp -a "$src/$path" "$dest/"
+      fi
     done
   fi
-  mkdir -p "$DIR/config"
-  ok "Код в $DIR"
 }
 
 # ---------- 3. Конфигурация ----------
@@ -530,6 +579,7 @@ attach_to_site() {
 
   cat "$tmp" > "$target"
   rm -f "$tmp"
+  remember_site "$target"
   reload_or_rollback "$target" "${target}.anex-orders.bak"
 }
 
@@ -545,11 +595,25 @@ attach_plesk() {
   [[ $DETACH_SITE -eq 0 ]] && location_block >> "$tmp"
   cat "$tmp" > "$file"
   rm -f "$tmp"
+  remember_site "$file"
 
   if command -v plesk >/dev/null; then
     plesk sbin httpdmng --reconfigure-domain "$DOMAIN" >/dev/null 2>&1 || warn "не удалось пересобрать конфигурацию домена в Plesk"
   fi
   reload_or_rollback "$file" "${file}.anex-orders.bak"
+}
+
+# Куда встроена панель — чтобы обновление могло вернуть блок без флагов.
+remember_site() {
+  [[ -f "$DIR/.env" ]] || return 0
+  if [[ $DETACH_SITE -eq 1 ]]; then
+    set_env "$DIR/.env" NGINX_SITE ""
+    set_env "$DIR/.env" NGINX_DOMAIN ""
+  else
+    set_env "$DIR/.env" NGINX_SITE "$1"
+    set_env "$DIR/.env" NGINX_DOMAIN "$DOMAIN"
+  fi
+  chown "$RUN_USER":"$RUN_USER" "$DIR/.env" 2>/dev/null || true
 }
 
 reload_or_rollback() {
@@ -666,12 +730,17 @@ if [[ "${LIST_SITES:-0}" -eq 1 ]]; then
   exit 0
 fi
 
+load_existing_config
 check_neighbour
 install_node
 install_files
 write_env
 install_service
 if [[ -n "$ATTACH_SITE" || $DETACH_SITE -eq 1 ]]; then
+  attach_to_site
+elif [[ -n "${SAVED_SITE:-}" ]]; then
+  # Обновление уже встроенной панели: возвращаем блок в тот же файл.
+  ATTACH_SITE="$SAVED_SITE"
   attach_to_site
 else
   install_nginx

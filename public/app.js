@@ -302,6 +302,7 @@ function settingsForm(data) {
       <div style="margin-top:14px">
         <button class="btn" type="submit">Сохранить</button>
         <button class="btn btn--ghost" type="button" data-test-connection>Проверить связь</button>
+        ${data.tokenSource === 'panel' ? '<button class="btn btn--danger" type="button" data-delete-token>Удалить токен</button>' : ''}
       </div>
       <div id="settings-result"></div>
     </form>
@@ -351,6 +352,29 @@ async function openSettings() {
     say(true, 'Сохранено');
     load({ force: true });
   });
+
+  const removeButton = form.querySelector('[data-delete-token]');
+  if (removeButton) {
+    removeButton.addEventListener('click', async () => {
+      if (!confirm('Удалить токен? Панель перестанет получать заказы, пока не будет введён новый.')) return;
+
+      const response = await fetch(api('/api/settings'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Пустая строка — это осознанное удаление, в отличие от пустого поля формы.
+        body: JSON.stringify({ token: '' }),
+      });
+      if (!response.ok) {
+        say(false, 'Не удалось удалить токен');
+        return;
+      }
+      const data_ = await response.json();
+      // Если токен остался в .env сервера, панель продолжит работать на нём.
+      say(true, data_.tokenSet ? 'Токен панели удалён, используется токен из .env сервера' : 'Токен удалён');
+      await openSettings();
+      load({ force: true });
+    });
+  }
 
   form.querySelector('[data-test-connection]').addEventListener('click', async () => {
     say(true, 'Проверяю…');

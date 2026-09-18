@@ -326,6 +326,7 @@ body {
 }
 
 .btn--ghost { background: #eef0f4; color: var(--text); }
+.btn--danger { background: var(--st-problem-bg); color: var(--st-problem-fg); }
 .btn + .field { display: block; margin-bottom: 12px; }
 .field__label { display: block; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
 .field__input {

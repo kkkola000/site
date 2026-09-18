@@ -339,3 +339,82 @@ test('когда сайт не найден, возвращается ошибк
 test('явно указанный несуществующий файл отвергается', () => {
   assert.throws(() => withFakeNginx('resolve_site_file /нет/такого.conf "" 8080'), /файл сайта не найден/);
 });
+
+// --- Обновление уже настроенной установки ---
+
+function loadConfig(envContent, args = '') {
+  const dir = mkdtempSync(join(tmpdir(), 'update-'));
+  writeFileSync(join(dir, '.env'), envContent);
+  // Разбор аргументов делает сам скрипт, поэтому запускаем его как при установке.
+  return runBash(
+    `DIR="${dir}"\n` +
+      (args ? `${args}\n` : '') +
+      `load_existing_config >/dev/null\n` +
+      `printf "PORT=%s\\nBASE_PATH=%s\\nBIND=%s\\nSITE=%s\\nDOMAIN=%s\\n" "$PORT" "$BASE_PATH" "${'$'}{BIND_HOST:-}" "${'$'}{SAVED_SITE:-}" "$DOMAIN"`,
+  );
+}
+
+test('обновление без флагов сохраняет порт, подпуть и адрес прослушивания', () => {
+  const out = loadConfig('PORT=3020\nBASE_PATH=/anex-orders\nHOST=10.66.66.1\n');
+  assert.match(out, /^PORT=3020$/m);
+  assert.match(out, /^BASE_PATH=\/anex-orders$/m);
+  assert.match(out, /^BIND=10\.66\.66\.1$/m);
+});
+
+test('переданный флаг важнее сохранённого значения', () => {
+  const out = loadConfig('PORT=3020\nBASE_PATH=/anex-orders\n', 'PORT=3030; PORT_SET=1');
+  assert.match(out, /^PORT=3030$/m);
+  assert.match(out, /^BASE_PATH=\/anex-orders$/m);
+});
+
+test('панель в корне сайта не получает подпуть при обновлении', () => {
+  // Пустой BASE_PATH — это значение, а не «не задано».
+  const out = loadConfig('PORT=3010\nBASE_PATH=\nHOST=127.0.0.1\n');
+  assert.match(out, /^BASE_PATH=$/m);
+  assert.match(out, /^BIND=$/m);
+});
+
+test('обновление помнит, в какой сайт nginx встроена панель', () => {
+  const out = loadConfig(
+    'PORT=3010\nBASE_PATH=/anex-orders\nNGINX_SITE=/etc/nginx/sites-available/ozon-pack\nNGINX_DOMAIN=seller.anex-online.kz\n',
+  );
+  assert.match(out, /^SITE=\/etc\/nginx\/sites-available\/ozon-pack$/m);
+  assert.match(out, /^DOMAIN=seller\.anex-online\.kz$/m);
+});
+
+test('первая установка работает без сохранённых значений', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'update-'));
+  const out = runBash(
+    `DIR="${dir}"\nload_existing_config >/dev/null\nprintf "PORT=%s\\nSITE=%s\\n" "$PORT" "\${SAVED_SITE:-}"`,
+  );
+  assert.match(out, /^PORT=3010$/m);
+  assert.match(out, /^SITE=$/m);
+});
+
+test('обновление кода не трогает токен, настройки и .env', () => {
+  const src = mkdtempSync(join(tmpdir(), 'src-'));
+  const dest = mkdtempSync(join(tmpdir(), 'dest-'));
+
+  // Репозиторий: новая версия кода.
+  execFileSync('mkdir', ['-p', join(src, 'server'), join(src, 'config')]);
+  writeFileSync(join(src, 'server/index.js'), 'новая версия\n');
+  writeFileSync(join(src, 'config/stations.example.json'), '{}\n');
+
+  // Установка на сервере: рабочие данные и файл, удалённый из репозитория.
+  execFileSync('mkdir', ['-p', join(dest, 'server'), join(dest, 'config')]);
+  writeFileSync(join(dest, '.env'), 'YANDEX_OAUTH_TOKEN=из-env\n');
+  writeFileSync(join(dest, 'config/settings.json'), '{"token":"боевой-токен"}\n');
+  writeFileSync(join(dest, 'config/stations.json'), '{"пвз":"адрес"}\n');
+  writeFileSync(join(dest, 'server/index.js'), 'старая версия\n');
+  writeFileSync(join(dest, 'server/удалённый.js'), 'этого файла больше нет в репозитории\n');
+
+  runBash(`sync_files "${src}" "${dest}"`);
+
+  // Рабочие данные на месте.
+  assert.match(readFileSync(join(dest, 'config/settings.json'), 'utf8'), /боевой-токен/);
+  assert.match(readFileSync(join(dest, 'config/stations.json'), 'utf8'), /адрес/);
+  assert.match(readFileSync(join(dest, '.env'), 'utf8'), /из-env/);
+  // Код обновился, удалённый из репозитория файл убран.
+  assert.match(readFileSync(join(dest, 'server/index.js'), 'utf8'), /новая версия/);
+  assert.throws(() => readFileSync(join(dest, 'server/удалённый.js')), /ENOENT/);
+});
