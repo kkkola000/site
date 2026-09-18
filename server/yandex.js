@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { effectiveToken } from './settings.js';
+import { effectiveToken, DEFAULT_LABEL_SIZE } from './settings.js';
 
 // Эндпоинты API «Доставка в другой день» (b2b-authproxy.taxi.yandex.net).
 // Источник: Список методов, раздел «3. Основные запросы».
@@ -145,7 +145,9 @@ export const getRequestHistory = (requestId) =>
 export const getActualInfo = (requestId) =>
   call(ENDPOINTS.requestActualInfo, { query: { request_id: requestId } });
 
-export const generateLabels = (requestIds, { labelSize = '100x150', generateType = 'one' } = {}) =>
+// Тело запроса — по документации метода 4.01: request_ids (массив),
+// generate_type (one | many), label_size_mm из перечня, language.
+export const generateLabels = (requestIds, { labelSize = DEFAULT_LABEL_SIZE, generateType = 'one' } = {}) =>
   call(ENDPOINTS.generateLabels, {
     raw: true,
     body: {
