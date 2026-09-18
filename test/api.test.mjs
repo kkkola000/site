@@ -57,11 +57,13 @@ async function startStub() {
       let body = '';
       req.on('data', (chunk) => (body += chunk));
       req.on('end', () => {
-        const size = JSON.parse(body || '{}').label_size_mm || '';
+        const payload = JSON.parse(body || '{}');
+        const size = payload.label_size_mm || '';
+        const layout = payload.generate_type || '';
         const [w, h] = size.split('x').map(Number);
         const box = w && h ? `0 0 ${(w * 72) / 25.4} ${(h * 72) / 25.4}` : '0 0 595.28 841.89';
         res.writeHead(200, { 'Content-Type': 'application/pdf' });
-        res.end(Buffer.from(`%PDF-1.4 ${size}\n1 0 obj<</Type/Page/MediaBox [${box}]>>endobj`));
+        res.end(Buffer.from(`%PDF-1.4 ${size} ${layout}\n1 0 obj<</Type/Page/MediaBox [${box}]>>endobj`));
       });
       return;
     }
@@ -170,7 +172,8 @@ test('панель отдаёт заказы, разделы, поиск, кар
     // Панель сверяет размер страницы в самом PDF: видно, что вернулась этикетка, а не A4.
     assert.equal(response.headers.get('x-label-requested-mm'), '58x40');
     assert.equal(response.headers.get('x-label-actual-mm'), '58x40');
-    assert.match(await response.text(), /^%PDF-1\.4 58x40/);
+    // generate_type: many — так этикетка приходит нужного размера.
+    assert.match(await response.text(), /^%PDF-1\.4 58x40 many/);
   });
 
   await t.test('формат можно выбрать в карточке заказа', async () => {
@@ -379,4 +382,48 @@ test('формат ярлыка по умолчанию меняется в на
     body: JSON.stringify({ labelSize: 'A3' }),
   });
   assert.equal(ignored.labelSize, '75x120');
+});
+
+test('раскладка ярлыков на странице настраивается', async (t) => {
+  const stub = await startStub();
+  t.after(() => stub.server.close());
+
+  const settingsFile = join(mkdtempSync(join(tmpdir(), 'settings-')), 'settings.json');
+  const panel = await startPanel({
+    PORT: '0',
+    HOST: '127.0.0.1',
+    YANDEX_API_BASE: stub.base,
+    YANDEX_OAUTH_TOKEN: TOKEN,
+    SETTINGS_FILE: settingsFile,
+  });
+  t.after(() => panel.child.kill());
+
+  const json = async (path, init) => (await fetch(`${panel.base}${path}`, init)).json();
+  const label = (query = '') =>
+    fetch(`${panel.base}/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label${query}`).then((r) => r.text());
+
+  // По умолчанию — many, как в рабочем запросе к API.
+  assert.equal((await json('/api/settings')).labelLayout, 'many');
+  assert.match(await label(), /58x40 many$|58x40 many\n/);
+
+  const saved = await json('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ labelLayout: 'one' }),
+  });
+  assert.equal(saved.labelLayout, 'one');
+  assert.match(await label(), /58x40 one/);
+
+  // Разовая печать может переопределить раскладку, не меняя настройку.
+  assert.match(await label('?layout=many'), /58x40 many/);
+  assert.equal((await json('/api/settings')).labelLayout, 'one');
+
+  // Недопустимое значение не затирает сохранённое и не уходит в API.
+  const ignored = await json('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ labelLayout: 'grid' }),
+  });
+  assert.equal(ignored.labelLayout, 'one');
+  assert.match(await label('?layout=grid'), /58x40 one/);
 });

@@ -19,6 +19,19 @@ export const LABEL_SIZES = [
 
 export const DEFAULT_LABEL_SIZE = '58x40';
 
+// Раскладка ярлыков на странице: one — один на страницу, many — максимум.
+// Для A4 этим задаётся, сколько этикеток ляжет на лист.
+export const LABEL_LAYOUTS = [
+  { value: 'many', title: 'Максимум ярлыков на странице' },
+  { value: 'one', title: 'Один ярлык на страницу' },
+];
+
+export const DEFAULT_LABEL_LAYOUT = 'many';
+
+export function isLabelLayout(value) {
+  return LABEL_LAYOUTS.some((layout) => layout.value === value);
+}
+
 export function isLabelSize(value) {
   return LABEL_SIZES.some((size) => size.value === value);
 }
@@ -27,7 +40,13 @@ let cache = null;
 
 function load() {
   if (cache) return cache;
-  cache = { token: '', stationIds: [], labelSize: DEFAULT_LABEL_SIZE, updatedAt: '' };
+  cache = {
+    token: '',
+    stationIds: [],
+    labelSize: DEFAULT_LABEL_SIZE,
+    labelLayout: DEFAULT_LABEL_LAYOUT,
+    updatedAt: '',
+  };
   if (existsSync(FILE)) {
     try {
       const raw = JSON.parse(readFileSync(FILE, 'utf8'));
@@ -35,6 +54,7 @@ function load() {
         token: String(raw.token || '').trim(),
         stationIds: Array.isArray(raw.stationIds) ? raw.stationIds.filter(Boolean).map(String) : [],
         labelSize: isLabelSize(raw.labelSize) ? raw.labelSize : DEFAULT_LABEL_SIZE,
+        labelLayout: isLabelLayout(raw.labelLayout) ? raw.labelLayout : DEFAULT_LABEL_LAYOUT,
         updatedAt: String(raw.updatedAt || ''),
       };
     } catch (err) {
@@ -44,7 +64,7 @@ function load() {
   return cache;
 }
 
-export function saveSettings({ token, stationIds, labelSize } = {}) {
+export function saveSettings({ token, stationIds, labelSize, labelLayout } = {}) {
   const current = load();
   const next = {
     // Пустая строка — осознанная очистка, undefined — поле не передавали.
@@ -57,6 +77,7 @@ export function saveSettings({ token, stationIds, labelSize } = {}) {
             .filter(Boolean),
     // Неизвестный размер игнорируем: API примет только значения из списка.
     labelSize: isLabelSize(labelSize) ? labelSize : current.labelSize,
+    labelLayout: isLabelLayout(labelLayout) ? labelLayout : current.labelLayout,
     updatedAt: new Date().toISOString(),
   };
 
@@ -85,6 +106,11 @@ export function effectiveLabelSize() {
   return isLabelSize(value) ? value : DEFAULT_LABEL_SIZE;
 }
 
+export function effectiveLabelLayout() {
+  const value = load().labelLayout;
+  return isLabelLayout(value) ? value : DEFAULT_LABEL_LAYOUT;
+}
+
 export function tokenSource() {
   if (load().token) return 'panel';
   if (config.yandex.token) return 'env';
@@ -109,6 +135,8 @@ export function settingsView() {
     stationIds: effectiveStationIds(),
     labelSize: effectiveLabelSize(),
     labelSizes: LABEL_SIZES,
+    labelLayout: effectiveLabelLayout(),
+    labelLayouts: LABEL_LAYOUTS,
     updatedAt: settings.updatedAt,
     apiBase: config.yandex.base,
   };

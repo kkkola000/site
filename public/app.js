@@ -386,6 +386,12 @@ function settingsForm(data) {
         </select>
       </label>
       <label class="field">
+        <span class="field__label">Раскладка ярлыков на странице</span>
+        <select class="field__input" name="labelLayout">
+          ${(data.labelLayouts || []).map((layout) => `<option value="${escapeHtml(layout.value)}"${layout.value === data.labelLayout ? ' selected' : ''}>${escapeHtml(layout.title)}</option>`).join('')}
+        </select>
+      </label>
+      <label class="field">
         <span class="field__label">Склады отгрузки, через запятую (необязательно)</span>
         <input class="field__input" type="text" name="stationIds" autocomplete="off" spellcheck="false"
                value="${escapeHtml((data.stationIds || []).join(', '))}" placeholder="platform_station_id">
@@ -430,7 +436,11 @@ async function openSettings() {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const token = form.token.value.trim();
-    const payload = { stationIds: form.stationIds.value, labelSize: form.labelSize.value };
+    const payload = {
+      stationIds: form.stationIds.value,
+      labelSize: form.labelSize.value,
+      labelLayout: form.labelLayout.value,
+    };
     // Пустое поле означает «не менять», а не «стереть токен».
     if (token) payload.token = token;
 
