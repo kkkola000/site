@@ -43,6 +43,19 @@ const stub = createServer((req, res) => {
       { status: 'DELIVERY_TRANSPORTATION', description: 'Заказ выехал в пункт назначения', timestamp_utc: '2026-09-16T12:00:00.000000Z' },
     ] });
   }
+  if (path === '/api/b2b/platform/request/generate-labels') {
+    // Демонстрационный ярлык: страница ровно того размера, который запросили.
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      const size = JSON.parse(body || '{}').label_size_mm || '58x40';
+      const [w, h] = size.split('x').map(Number);
+      const box = `0 0 ${(w * 72) / 25.4} ${(h * 72) / 25.4}`;
+      res.writeHead(200, { 'Content-Type': 'application/pdf' });
+      res.end(Buffer.from(`%PDF-1.4\n1 0 obj<</Type/Page/MediaBox [${box}]>>endobj\n%%EOF`));
+    });
+    return;
+  }
   if (path === '/api/b2b/platform/request/actual_info') return json({ delivery_date: '2026-09-17', delivery_interval: { from: '10:00+03:00', to: '18:00+03:00' } });
   res.writeHead(404); res.end('{}');
 });

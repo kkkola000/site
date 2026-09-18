@@ -446,3 +446,4 @@ test('панель показывает, если задан не боевой �
   assert.equal(defaultView.apiBase, 'https://b2b-authproxy.taxi.yandex.net');
   assert.equal(defaultView.apiBaseIsProduction, true);
 });
+
