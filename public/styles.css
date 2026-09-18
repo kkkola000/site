@@ -291,6 +291,7 @@ body {
 .timeline li::after { content: ""; position: absolute; left: 4px; top: 17px; bottom: 0; width: 2px; background: var(--line); }
 .timeline li:last-child { padding-bottom: 0; }
 .timeline li:last-child::after { display: none; }
+.timeline__major > div:first-child { font-weight: 600; }
 .timeline__time { color: var(--muted); font-size: 13px; }
 
 .field { display: block; margin-bottom: 12px; }

@@ -212,7 +212,7 @@ function detailPanels(order) {
 
   const history = (order.history || [])
     .map(
-      (state_) => `<li>
+      (state_) => `<li${state_.major ? ' class="timeline__major"' : ''}>
         <div>${escapeHtml(state_.description || state_.label)}</div>
         <div class="timeline__time">${escapeHtml(formatDateTime(state_.at))}${state_.reason ? ` · ${escapeHtml(state_.reason)}` : ''}</div>
       </li>`,

@@ -82,8 +82,8 @@ export const reportCourier = {
     last_mile_policy: 'time_interval',
   },
   state: {
-    status: 'RETURNING',
-    description: 'Заказ возвращается',
+    status: 'RETURN_TRANSPORTATION_STARTED',
+    description: 'Заказ едет в точку выдачи',
     timestamp: 1758153600,
     timestamp_utc: '2026-09-17T12:00:00.000000Z',
     reason: 'USER_CHANGED_MIND',

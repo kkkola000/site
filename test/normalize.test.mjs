@@ -30,6 +30,7 @@ test('курьерский заказ: адрес собирается из де
   assert.equal(order.delivery.address, 'Реутов, Юбилейный проспект, 12, к1');
   assert.match(order.delivery.hints, /подъезд 3/);
   assert.equal(order.status.group, 'return');
+  assert.equal(order.status.label, 'Едет в точку выдачи');
   assert.equal(order.status.reasonLabel, 'Получатель передумал');
   assert.equal(order.totalPrice, 240000);
   assert.equal(order.deliveryCost, 500);
@@ -46,23 +47,69 @@ test('поисковый индекс покрывает номер, товар,
   }
 });
 
-test('статусы раскладываются по разделам панели, неизвестные — по шаблону', () => {
+test('вся статусная модель раскладывается по разделам панели', () => {
   const groups = TABS.map((tab) => tab.id);
+  // Полный список статусов из документации «Доставки в другой день»
+  // (обе ветки — до двери и до ПВЗ).
   const cases = {
+    VALIDATING_ERROR: 'awaiting',
     CREATED: 'awaiting',
+    DELIVERY_PROCESSING_STARTED: 'awaiting',
+    SORTING_CENTER_LOADED: 'awaiting',
+
+    SORTING_CENTER_AT_START: 'transit',
+    SORTING_CENTER_PREPARED: 'transit',
+    SORTING_CENTER_TRANSMITTED: 'transit',
+    DELIVERY_AT_START: 'transit',
+    DELIVERY_AT_START_SORT: 'transit',
     DELIVERY_TRANSPORTATION: 'transit',
+    DELIVERY_TRANSPORTATION_RECIPIENT: 'transit',
+    DELIVERY_ARRIVED_PICKUP_POINT: 'transit',
+    CONFIRMATION_CODE_RECEIVED: 'transit',
+    DELIVERY_TIME_INTERVALS_UPDATED: 'transit',
+    DELIVERY_ATTEMPT_FAILED: 'transit',
+
+    DELIVERY_TRANSMITTED_TO_RECIPIENT: 'done',
+    PARTICULARLY_DELIVERED: 'done',
     DELIVERY_DELIVERED: 'done',
-    RETURNING: 'return',
     CANCELLED: 'done',
-    SOMETHING_RETURN_NEW: 'return',
-    TOTALLY_UNKNOWN: 'awaiting',
+
+    SORTING_CENTER_RETURN_RETURNED: 'return',
+    RETURN_TRANSPORTATION_STARTED: 'return',
+    RETURN_ARRIVED_DELIVERY: 'return',
+    RETURN_READY_FOR_PICKUP: 'return',
+    RETURN_RETURNED: 'return',
   };
+
   for (const [status, expected] of Object.entries(cases)) {
     const resolved = resolveStatus(status, '');
     assert.equal(resolved.group, expected, `${status} → ${resolved.group}`);
     assert.ok(groups.includes(resolved.group));
+    // У каждого известного статуса есть человекочитаемое название, не код.
+    assert.ok(resolved.label && resolved.label !== status, `${status}: нет названия`);
   }
-  assert.equal(resolveStatus('ERROR', '').problem, true);
+});
+
+test('основные статусы цепочки отмечены как основные', () => {
+  for (const status of ['CREATED', 'SORTING_CENTER_AT_START', 'DELIVERY_DELIVERED', 'RETURN_RETURNED', 'CANCELLED']) {
+    assert.equal(resolveStatus(status, '').major, true, status);
+  }
+  // Статусы детализации основными не считаются.
+  assert.equal(resolveStatus('SORTING_CENTER_PREPARED', '').major, false);
+});
+
+test('проблемные статусы подсвечиваются', () => {
+  assert.equal(resolveStatus('VALIDATING_ERROR', '').problem, true);
+  assert.equal(resolveStatus('DELIVERY_ATTEMPT_FAILED', '').problem, true);
+  assert.equal(resolveStatus('DELIVERY_DELIVERED', '').problem, false);
+});
+
+test('незнакомый статус не ломает фильтрацию', () => {
+  // Появится новый статус — он попадёт в раздел по имени, а не потеряется.
+  assert.equal(resolveStatus('RETURN_SOMETHING_NEW', '').group, 'return');
+  assert.equal(resolveStatus('DELIVERY_SOMETHING_NEW', '').group, 'transit');
+  assert.equal(resolveStatus('SORTING_CENTER_SOMETHING_NEW', '').group, 'transit');
+  assert.equal(resolveStatus('TOTALLY_UNKNOWN', '').group, 'awaiting');
 });
 
 test('адрес без full_address собирается из частей', () => {

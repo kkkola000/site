@@ -134,6 +134,8 @@ export async function getOrderDetails(requestId) {
         label: resolved.label,
         description: state.description || '',
         group: resolved.group,
+        major: resolved.major,
+        problem: resolved.problem,
         at: state.timestamp_utc || (state.timestamp ? new Date(state.timestamp * 1000).toISOString() : ''),
         reason: state.reason || '',
       };

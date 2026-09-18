@@ -11,10 +11,14 @@ const TOKEN = 'preview';
 
 const done = { ...reportPickup, request_id: 'done-1', courier_order_id: '786459120',
   request: { ...reportPickup.request, info: { operator_request_id: '29991724-0649-1' } },
-  state: { status: 'DELIVERY_DELIVERED', description: 'Заказ доставлен', timestamp_utc: '2026-09-15T14:20:00.000000Z' } };
+  state: { status: 'DELIVERY_DELIVERED', description: 'Заказ вручен клиенту', timestamp_utc: '2026-09-15T14:20:00.000000Z' } };
 const awaiting = { ...reportPickup, request_id: 'new-1', courier_order_id: '',
   request: { ...reportPickup.request, info: { operator_request_id: '29991724-0650-1' } },
-  state: { status: 'CREATED', description: 'Заказ создан в операторе', timestamp_utc: '2026-09-17T08:00:00.000000Z' } };
+  state: { status: 'CREATED', description: 'Заказ создан и подтверждён', timestamp_utc: '2026-09-17T08:00:00.000000Z' } };
+
+const failed = { ...reportPickup, request_id: 'fail-1', courier_order_id: '786459130',
+  request: { ...reportPickup.request, info: { operator_request_id: '29991724-0651-1' } },
+  state: { status: 'DELIVERY_ATTEMPT_FAILED', description: 'Неудачная попытка вручения заказа', timestamp_utc: '2026-09-17T11:10:00.000000Z' } };
 
 const stub = createServer((req, res) => {
   const path = req.url.split('?')[0];
@@ -22,16 +26,17 @@ const stub = createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(payload));
   };
-  if (path === '/api/b2b/platform/requests/info') return json({ requests: [reportPickup, reportCourier, done, awaiting] });
+  if (path === '/api/b2b/platform/requests/info') return json({ requests: [reportPickup, reportCourier, done, awaiting, failed] });
   if (path === '/api/b2b/platform/warehouses/list') {
     return json({ warehouses: [{ platform_station_id: 'e1139f6d-e34f-47a9-a55f-31f032a861a6', name: 'Склад ANEX', address: 'Москва, Ленинградский проспект, 27' }] });
   }
   if (path === '/api/b2b/platform/request/info') return json(reportPickup);
   if (path === '/api/b2b/platform/request/history') {
     return json({ state_history: [
-      { status: 'CREATED', description: 'Заказ создан в операторе', timestamp_utc: '2026-09-15T10:00:00.000000Z' },
-      { status: 'DELIVERY_LOADED', description: 'Заказ принят в доставку', timestamp_utc: '2026-09-16T08:30:00.000000Z' },
-      { status: 'DELIVERY_TRANSPORTATION', description: 'Заказ в пути', timestamp_utc: '2026-09-16T12:00:00.000000Z' },
+      { status: 'CREATED', description: 'Заказ создан и подтверждён', timestamp_utc: '2026-09-15T10:00:00.000000Z' },
+      { status: 'SORTING_CENTER_AT_START', description: 'Заказ поступил в сортировочный центр', timestamp_utc: '2026-09-16T08:30:00.000000Z' },
+      { status: 'SORTING_CENTER_TRANSMITTED', description: 'Заказ доставляется', timestamp_utc: '2026-09-16T10:00:00.000000Z' },
+      { status: 'DELIVERY_TRANSPORTATION', description: 'Заказ выехал в пункт назначения', timestamp_utc: '2026-09-16T12:00:00.000000Z' },
     ] });
   }
   if (path === '/api/b2b/platform/request/actual_info') return json({ delivery_date: '2026-09-17', delivery_interval: { from: '10:00+03:00', to: '18:00+03:00' } });

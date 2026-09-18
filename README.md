@@ -229,9 +229,23 @@ npm start                # боевой запуск (нужен .env с ток�
 
 ## Как статусы раскладываются по разделам
 
-Соответствие «статус API → раздел панели» собрано в одном месте —
-`server/statuses.js`. Известные статусы (`CREATED`, `DELIVERY_TRANSPORTATION`,
-`DELIVERY_DELIVERED`, `RETURNING`, `CANCELLED`, `ERROR`, …) разложены явно,
-незнакомый статус определяется по шаблону имени (`*RETURN*` → Возврат,
-`*DELIVERED*` → Завершены и т. д.), поэтому новый статус в API не ломает
-фильтрацию. Если статусная модель расширится — правка в одном файле.
+Соответствие «статус API → раздел панели» собрано в одном месте — `server/statuses.js`,
+по [статусной модели](https://yandex.ru/support/delivery-profile/ru/api/other-day/status-model)
+«Доставки в другой день» (обе ветки: до двери и до ПВЗ).
+
+| Раздел | Статусы |
+|---|---|
+| **Ожидает отгрузки** | `VALIDATING_ERROR`, `CREATED`, `DELIVERY_PROCESSING_STARTED`, `SORTING_CENTER_LOADED` |
+| **В пути** | `SORTING_CENTER_AT_START`, `SORTING_CENTER_PREPARED`, `SORTING_CENTER_TRANSMITTED`, `DELIVERY_AT_START`, `DELIVERY_AT_START_SORT`, `DELIVERY_TRANSPORTATION`, `DELIVERY_TRANSPORTATION_RECIPIENT`, `DELIVERY_ARRIVED_PICKUP_POINT`, `CONFIRMATION_CODE_RECEIVED`, `DELIVERY_TIME_INTERVALS_UPDATED`, `DELIVERY_ATTEMPT_FAILED` |
+| **Возврат** | `SORTING_CENTER_RETURN_RETURNED`, `RETURN_TRANSPORTATION_STARTED`, `RETURN_ARRIVED_DELIVERY`, `RETURN_READY_FOR_PICKUP`, `RETURN_RETURNED` |
+| **Завершены** | `DELIVERY_TRANSMITTED_TO_RECIPIENT`, `PARTICULARLY_DELIVERED`, `DELIVERY_DELIVERED`, `CANCELLED` |
+
+Граница между «Ожидает отгрузки» и «В пути» — `SORTING_CENTER_AT_START`:
+до него заказ ещё оформляется, после — физически принят в сортировочном центре.
+
+`VALIDATING_ERROR` и `DELIVERY_ATTEMPT_FAILED` подсвечиваются красным бейджем
+как требующие внимания. Основные статусы цепочки (в документации выделены
+жирным) отмечены в истории заказа полужирным, статусы детализации — обычным.
+
+Незнакомый статус определяется по шаблону имени (`*RETURN*` → Возврат,
+`*DELIVERY*` → В пути и т. д.), поэтому новый статус в API не ломает фильтрацию.
