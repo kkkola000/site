@@ -59,7 +59,8 @@
     <div>
       <label for="generateType">generate_type</label>
       <select id="generateType">
-        <option value="one" selected>one</option>
+        <option value="" selected>— не отправлять —</option>
+        <option value="one">one</option>
         <option value="many">many</option>
       </select>
     </div>
@@ -67,6 +68,7 @@
 
   <label for="language">language</label>
   <input type="text" id="language" value="ru">
+  <div class="hint">generate_type задаёт раскладку на листе A4; для этикеток его можно не отправлять.</div>
 </fieldset>
 
 <button id="sendBtn" onclick="sendRequest()">Получить ярлык</button>
@@ -91,12 +93,16 @@ function buildBody() {
   const ids = document.getElementById('requestIds').value
     .split(',').map(s => s.trim()).filter(s => s !== '');
 
-  return {
+  const body = {
     request_ids: ids,
-    generate_type: document.getElementById('generateType').value,
     label_size_mm: document.getElementById('size').value,
     language: document.getElementById('language').value.trim() || 'ru'
   };
+
+  const generateType = document.getElementById('generateType').value;
+  if (generateType !== '') body.generate_type = generateType;
+
+  return body;
 }
 
 function updatePreview() {

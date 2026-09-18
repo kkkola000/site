@@ -434,11 +434,14 @@ function settingsForm(data) {
         </select>
       </label>
       <label class="field">
-        <span class="field__label">Раскладка ярлыков на странице</span>
+        <span class="field__label">Раскладка на листе A4</span>
         <select class="field__input" name="labelLayout">
           ${(data.labelLayouts || []).map((layout) => `<option value="${escapeHtml(layout.value)}"${layout.value === data.labelLayout ? ' selected' : ''}>${escapeHtml(layout.title)}</option>`).join('')}
         </select>
       </label>
+      <div class="field__hint" style="margin:-6px 0 12px">
+        Раскладка применяется только к формату A4 — для этикеток параметр не отправляется.
+      </div>
       <label class="field">
         <span class="field__label">Склады отгрузки, через запятую (необязательно)</span>
         <input class="field__input" type="text" name="stationIds" autocomplete="off" spellcheck="false"

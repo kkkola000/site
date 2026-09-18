@@ -146,20 +146,27 @@ export const getActualInfo = (requestId) =>
   call(ENDPOINTS.requestActualInfo, { query: { request_id: requestId } });
 
 // Тело запроса — по документации метода 4.01: request_ids (массив),
-// generate_type (one | many), label_size_mm из перечня, language.
+// label_size_mm из перечня, language и generate_type.
+//
+// generate_type задаёт раскладку на листе A4 («одна на лист» или «максимум»),
+// к размеру самой этикетки он отношения не имеет. Для форматов этикеток поле
+// не отправляем: лишний параметр — вероятная причина того, что в ответ
+// приходит A4 вместо запрошенного размера.
+export const A4_LABEL_SIZE = '210x297';
+
 export const generateLabels = (
   requestIds,
   { labelSize = DEFAULT_LABEL_SIZE, generateType = DEFAULT_LABEL_LAYOUT } = {},
-) =>
-  call(ENDPOINTS.generateLabels, {
-    raw: true,
-    body: {
-      request_ids: Array.isArray(requestIds) ? requestIds : [requestIds],
-      generate_type: generateType,
-      label_size_mm: labelSize,
-      language: 'ru',
-    },
-  });
+) => {
+  const body = {
+    request_ids: Array.isArray(requestIds) ? requestIds : [requestIds],
+    label_size_mm: labelSize,
+    language: 'ru',
+  };
+  if (labelSize === A4_LABEL_SIZE) body.generate_type = generateType;
+
+  return call(ENDPOINTS.generateLabels, { raw: true, body });
+};
 
 export const listWarehouses = () => call(ENDPOINTS.warehousesList, { body: {} });
 

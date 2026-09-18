@@ -59,7 +59,7 @@ async function startStub() {
       req.on('end', () => {
         const payload = JSON.parse(body || '{}');
         const size = payload.label_size_mm || '';
-        const layout = payload.generate_type || '';
+        const layout = payload.generate_type === undefined ? 'нет' : payload.generate_type;
         const [w, h] = size.split('x').map(Number);
         const box = w && h ? `0 0 ${(w * 72) / 25.4} ${(h * 72) / 25.4}` : '0 0 595.28 841.89';
         res.writeHead(200, { 'Content-Type': 'application/pdf' });
@@ -172,13 +172,14 @@ test('панель отдаёт заказы, разделы, поиск, кар
     // Панель сверяет размер страницы в самом PDF: видно, что вернулась этикетка, а не A4.
     assert.equal(response.headers.get('x-label-requested-mm'), '58x40');
     assert.equal(response.headers.get('x-label-actual-mm'), '58x40');
-    assert.match(await response.text(), /^%PDF-1\.4 58x40 one/);
+    // Для этикетки generate_type не отправляется — он относится только к A4.
+    assert.match(await response.text(), /^%PDF-1\.4 58x40 нет/);
   });
 
   await t.test('формат можно выбрать в карточке заказа', async () => {
     const response = await get('/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label?size=100x150');
     assert.equal(response.headers.get('x-label-actual-mm'), '100x150');
-    assert.match(await response.text(), /^%PDF-1\.4 100x150/);
+    assert.match(await response.text(), /^%PDF-1\.4 100x150 нет/);
   });
 
   await t.test('неизвестный формат не уходит в API', async () => {
@@ -401,9 +402,10 @@ test('раскладка ярлыков на странице настраива
   const label = (query = '') =>
     fetch(`${panel.base}/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label${query}`).then((r) => r.text());
 
-  // По умолчанию — one, как в рабочем запросе к API.
+  // Для этикетки раскладка не отправляется вовсе: она про лист A4.
   assert.equal((await json('/api/settings')).labelLayout, 'one');
-  assert.match(await label(), /58x40 one/);
+  assert.match(await label(), /58x40 нет/);
+  assert.match(await label('?size=210x297'), /210x297 one/);
 
   const saved = await json('/api/settings', {
     method: 'POST',
@@ -411,10 +413,10 @@ test('раскладка ярлыков на странице настраива
     body: JSON.stringify({ labelLayout: 'many' }),
   });
   assert.equal(saved.labelLayout, 'many');
-  assert.match(await label(), /58x40 many/);
+  assert.match(await label('?size=210x297'), /210x297 many/);
 
   // Разовая печать может переопределить раскладку, не меняя настройку.
-  assert.match(await label('?layout=one'), /58x40 one/);
+  assert.match(await label('?size=210x297&layout=one'), /210x297 one/);
   assert.equal((await json('/api/settings')).labelLayout, 'many');
 
   // Недопустимое значение не затирает сохранённое и не уходит в API.
@@ -424,7 +426,7 @@ test('раскладка ярлыков на странице настраива
     body: JSON.stringify({ labelLayout: 'grid' }),
   });
   assert.equal(ignored.labelLayout, 'many');
-  assert.match(await label('?layout=grid'), /58x40 many/);
+  assert.match(await label('?size=210x297&layout=grid'), /210x297 many/);
 });
 
 test('панель показывает, если задан не боевой хост API', async (t) => {
