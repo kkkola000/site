@@ -253,8 +253,8 @@ npm start                # боевой запуск (нужен .env с ток�
 | **Ожидает отгрузки** | `VALIDATING_ERROR`, `CREATED`, `DELIVERY_PROCESSING_STARTED`, `SORTING_CENTER_LOADED` |
 | **В пути** | `SORTING_CENTER_AT_START`, `SORTING_CENTER_PREPARED`, `SORTING_CENTER_TRANSMITTED`, `DELIVERY_AT_START`, `DELIVERY_AT_START_SORT`, `DELIVERY_TRANSPORTATION`, `DELIVERY_TRANSPORTATION_RECIPIENT`, `DELIVERY_TIME_INTERVALS_UPDATED`, `DELIVERY_ATTEMPT_FAILED` |
 | **Готов к вручению** | `DELIVERY_ARRIVED_PICKUP_POINT`, `CONFIRMATION_CODE_RECEIVED`, `PARTICULARLY_DELIVERED` |
-| **Возврат** | `SORTING_CENTER_RETURN_RETURNED`, `RETURN_TRANSPORTATION_STARTED`, `RETURN_ARRIVED_DELIVERY`, `RETURN_READY_FOR_PICKUP`, `RETURN_RETURNED` |
-| **Завершены** | `DELIVERY_TRANSMITTED_TO_RECIPIENT`, `DELIVERY_DELIVERED`, `CANCELLED` |
+| **Возврат** | `SORTING_CENTER_RETURN_RETURNED`, `RETURN_TRANSPORTATION_STARTED`, `RETURN_ARRIVED_DELIVERY`, `RETURN_READY_FOR_PICKUP` |
+| **Завершены** | `DELIVERY_TRANSMITTED_TO_RECIPIENT`, `DELIVERY_DELIVERED`, `CANCELLED`, `RETURN_RETURNED` |
 
 Граница между «Ожидает отгрузки» и «В пути» — `SORTING_CENTER_AT_START`:
 до него заказ ещё оформляется, после — физически принят в сортировочном центре.
@@ -262,6 +262,9 @@ npm start                # боевой запуск (нужен .env с ток�
 Три статуса точки выдачи показываются одним понятным статусом «Готов к вручению»
 и вынесены в свой раздел: заказ доехал и ждёт получателя, дальше нужно действие
 человека, а не перевозчика.
+
+В разделе «Возврат» заказ виден, пока возврат едет; `RETURN_RETURNED` («Заказ
+возвращён в магазин») закрывает работу по заказу и уходит в «Завершены».
 
 `VALIDATING_ERROR` и `DELIVERY_ATTEMPT_FAILED` подсвечиваются красным бейджем
 как требующие внимания. Основные статусы цепочки (в документации выделены

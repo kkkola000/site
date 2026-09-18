@@ -80,7 +80,8 @@ test('вся статусная модель раскладывается по �
     RETURN_TRANSPORTATION_STARTED: 'return',
     RETURN_ARRIVED_DELIVERY: 'return',
     RETURN_READY_FOR_PICKUP: 'return',
-    RETURN_RETURNED: 'return',
+    // Возврат доехал до магазина — заказ закрыт.
+    RETURN_RETURNED: 'done',
   };
 
   for (const [status, expected] of Object.entries(cases)) {

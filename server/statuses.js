@@ -48,13 +48,14 @@ const STATUS_MAP = {
   DELIVERY_TRANSMITTED_TO_RECIPIENT: { group: 'done', label: 'Выдан получателю' },
   DELIVERY_DELIVERED: { group: 'done', label: 'Доставлен', major: true },
   CANCELLED: { group: 'done', label: 'Отменён', major: true },
+  // Возврат доехал до магазина — работа по заказу закончена.
+  RETURN_RETURNED: { group: 'done', label: 'Возвращён в магазин', major: true },
 
   // --- Возврат ---
   SORTING_CENTER_RETURN_RETURNED: { group: 'return', label: 'Возвращён отправителю' },
   RETURN_TRANSPORTATION_STARTED: { group: 'return', label: 'Едет в точку выдачи', major: true },
   RETURN_ARRIVED_DELIVERY: { group: 'return', label: 'Возвращён на склад', major: true },
   RETURN_READY_FOR_PICKUP: { group: 'return', label: 'Готов к передаче магазину', major: true },
-  RETURN_RETURNED: { group: 'return', label: 'Возвращён в магазин', major: true },
 };
 
 // Запасная раскладка для статусов, которых ещё нет в этом каталоге:
