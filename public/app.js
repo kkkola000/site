@@ -436,7 +436,12 @@ function settingsForm(data) {
   <div class="panel">
     <h3>Сервер</h3>
     <div class="card__rows">
-      <div class="row"><span class="row__label">API</span><span class="row__value">${escapeHtml(data.apiBase)}</span></div>
+      <div class="row"><span class="row__label">API</span><span class="row__value">${escapeHtml(data.apiBase)}${
+        data.apiBaseIsProduction
+          ? ''
+          : `<div class="row__hint" style="color:var(--st-problem-fg)">Не боевой хост. Боевой: ${escapeHtml(data.productionApiBase)} — задаётся в YANDEX_API_BASE</div>`
+      }</span></div>
+      <div class="row"><span class="row__label">Метод ярлыка</span><span class="row__value">${escapeHtml(data.apiBase)}/api/b2b/platform/request/generate-labels</span></div>
       ${data.updatedAt ? `<div class="row"><span class="row__label">Изменено</span><span class="row__value">${escapeHtml(formatDateTime(data.updatedAt))}</span></div>` : ''}
     </div>
   </div>`;

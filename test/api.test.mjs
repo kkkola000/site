@@ -426,3 +426,23 @@ test('раскладка ярлыков на странице настраива
   assert.equal(ignored.labelLayout, 'many');
   assert.match(await label('?layout=grid'), /58x40 many/);
 });
+
+test('панель показывает, если задан не боевой хост API', async (t) => {
+  const stub = await startStub();
+  t.after(() => stub.server.close());
+
+  // Заглушка — заведомо не боевой хост.
+  const panel = await startPanel({ PORT: '0', HOST: '127.0.0.1', YANDEX_API_BASE: stub.base, YANDEX_OAUTH_TOKEN: TOKEN });
+  t.after(() => panel.child.kill());
+
+  const view = await (await fetch(`${panel.base}/api/settings`)).json();
+  assert.equal(view.apiBaseIsProduction, false);
+  assert.equal(view.productionApiBase, 'https://b2b-authproxy.taxi.yandex.net');
+
+  // По умолчанию (без YANDEX_API_BASE) хост боевой.
+  const defaults = await startPanel({ PORT: '0', HOST: '127.0.0.1', YANDEX_OAUTH_TOKEN: TOKEN });
+  t.after(() => defaults.child.kill());
+  const defaultView = await (await fetch(`${defaults.base}/api/settings`)).json();
+  assert.equal(defaultView.apiBase, 'https://b2b-authproxy.taxi.yandex.net');
+  assert.equal(defaultView.apiBaseIsProduction, true);
+});

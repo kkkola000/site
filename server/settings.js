@@ -125,6 +125,10 @@ export function maskToken(token) {
   return `${value.slice(0, 4)}…${value.slice(-4)}`;
 }
 
+// Боевой контур Яндекс Доставки. Тестовый ведёт себя иначе, поэтому
+// отличие от боевого хоста панель показывает явно.
+export const PRODUCTION_API_BASE = 'https://b2b-authproxy.taxi.yandex.net';
+
 export function settingsView() {
   const settings = load();
   const token = effectiveToken();
@@ -139,6 +143,8 @@ export function settingsView() {
     labelLayouts: LABEL_LAYOUTS,
     updatedAt: settings.updatedAt,
     apiBase: config.yandex.base,
+    apiBaseIsProduction: config.yandex.base === PRODUCTION_API_BASE,
+    productionApiBase: PRODUCTION_API_BASE,
   };
 }
 
