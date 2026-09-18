@@ -118,7 +118,10 @@ test('панель отдаёт заказы, разделы, поиск, кар
     assert.equal(data.counts.transit, 1);
     assert.equal(data.counts.return, 1);
     assert.equal(data.error, null);
-    assert.equal(data.tabs.map((tab) => tab.title).join(','), 'Все,Ожидает отгрузки,В пути,Возврат,Завершены');
+    assert.equal(
+      data.tabs.map((tab) => tab.title).join(','),
+      'Все,Ожидает отгрузки,В пути,Готов к вручению,Возврат,Завершены',
+    );
 
     const order = data.groups.flatMap((group) => group.orders).find((o) => o.orderNumber === 'lKF4565ml');
     assert.equal(order.trackNumber, '786459112');

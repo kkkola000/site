@@ -16,6 +16,10 @@ const awaiting = { ...reportPickup, request_id: 'new-1', courier_order_id: '',
   request: { ...reportPickup.request, info: { operator_request_id: '29991724-0650-1' } },
   state: { status: 'CREATED', description: 'Заказ создан и подтверждён', timestamp_utc: '2026-09-17T08:00:00.000000Z' } };
 
+const atPoint = { ...reportPickup, request_id: 'ready-1', courier_order_id: '786459125',
+  request: { ...reportPickup.request, info: { operator_request_id: '29991724-0652-1' } },
+  state: { status: 'DELIVERY_ARRIVED_PICKUP_POINT', description: 'Заказ доставлен в пункт назначения', timestamp_utc: '2026-09-17T09:40:00.000000Z' } };
+
 const failed = { ...reportPickup, request_id: 'fail-1', courier_order_id: '786459130',
   request: { ...reportPickup.request, info: { operator_request_id: '29991724-0651-1' } },
   state: { status: 'DELIVERY_ATTEMPT_FAILED', description: 'Неудачная попытка вручения заказа', timestamp_utc: '2026-09-17T11:10:00.000000Z' } };
@@ -26,7 +30,7 @@ const stub = createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(payload));
   };
-  if (path === '/api/b2b/platform/requests/info') return json({ requests: [reportPickup, reportCourier, done, awaiting, failed] });
+  if (path === '/api/b2b/platform/requests/info') return json({ requests: [reportPickup, reportCourier, done, awaiting, failed, atPoint] });
   if (path === '/api/b2b/platform/warehouses/list') {
     return json({ warehouses: [{ platform_station_id: 'e1139f6d-e34f-47a9-a55f-31f032a861a6', name: 'Склад ANEX', address: 'Москва, Ленинградский проспект, 27' }] });
   }

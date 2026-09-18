@@ -1,9 +1,11 @@
 // Статусная модель «Доставки в другой день» и её раскладка по разделам панели.
 // Источник: yandex.ru/support/delivery-profile/ru/api/other-day/status-model
 //
-// Разделы: awaiting (Ожидает отгрузки), transit (В пути), return (Возврат),
-// done (Завершены). Граница между awaiting и transit — момент, когда заказ
-// физически принят в сортировочном центре (SORTING_CENTER_AT_START).
+// Разделы: awaiting (Ожидает отгрузки), transit (В пути), ready (Готов к
+// вручению), return (Возврат), done (Завершены). Граница между awaiting и
+// transit — момент, когда заказ физически принят в сортировочном центре
+// (SORTING_CENTER_AT_START); заказ, доехавший до точки выдачи и ожидающий
+// получателя, выделен в отдельный раздел «Готов к вручению».
 //
 // major — основные статусы логистической цепочки (в документации выделены
 // жирным), остальные считаются статусами детализации.
@@ -12,6 +14,7 @@ export const TABS = [
   { id: 'all', title: 'Все' },
   { id: 'awaiting', title: 'Ожидает отгрузки' },
   { id: 'transit', title: 'В пути' },
+  { id: 'ready', title: 'Готов к вручению' },
   { id: 'return', title: 'Возврат' },
   { id: 'done', title: 'Завершены' },
 ];
@@ -33,14 +36,16 @@ const STATUS_MAP = {
   DELIVERY_AT_START_SORT: { group: 'transit', label: 'В городе получателя' },
   DELIVERY_TRANSPORTATION: { group: 'transit', label: 'Едет в пункт выдачи' },
   DELIVERY_TRANSPORTATION_RECIPIENT: { group: 'transit', label: 'Доставляется клиенту' },
-  DELIVERY_ARRIVED_PICKUP_POINT: { group: 'transit', label: 'Ожидает в пункте выдачи' },
-  CONFIRMATION_CODE_RECEIVED: { group: 'transit', label: 'Код подтверждения получен' },
   DELIVERY_TIME_INTERVALS_UPDATED: { group: 'transit', label: 'Время доставки изменено' },
   DELIVERY_ATTEMPT_FAILED: { group: 'transit', label: 'Не вручён', problem: true },
 
+  // --- Готов к вручению: заказ на месте и ждёт получателя ---
+  DELIVERY_ARRIVED_PICKUP_POINT: { group: 'ready', label: 'Готов к вручению', major: true },
+  CONFIRMATION_CODE_RECEIVED: { group: 'ready', label: 'Готов к вручению' },
+  PARTICULARLY_DELIVERED: { group: 'ready', label: 'Готов к вручению', major: true },
+
   // --- Завершены ---
   DELIVERY_TRANSMITTED_TO_RECIPIENT: { group: 'done', label: 'Выдан получателю' },
-  PARTICULARLY_DELIVERED: { group: 'done', label: 'Доставлен частично', major: true },
   DELIVERY_DELIVERED: { group: 'done', label: 'Доставлен', major: true },
   CANCELLED: { group: 'done', label: 'Отменён', major: true },
 
@@ -56,6 +61,7 @@ const STATUS_MAP = {
 // порядок важен, более специфичные шаблоны идут раньше.
 const PATTERNS = [
   [/RETURN/, { group: 'return', label: 'Возврат' }],
+  [/(ARRIVED_PICKUP|READY_FOR_HANDOVER|CONFIRMATION_CODE)/, { group: 'ready', label: 'Готов к вручению' }],
   [/(DELIVERED|TRANSMITTED_TO_RECIPIENT)/, { group: 'done', label: 'Доставлен' }],
   [/CANCEL/, { group: 'done', label: 'Отменён' }],
   [/(DELIVERY|SORTING_CENTER|TRANSPORT|COURIER|PICKUP)/, { group: 'transit', label: 'В пути' }],

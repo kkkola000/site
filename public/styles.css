@@ -10,6 +10,7 @@
 
   --st-awaiting-bg: #fff4e0;  --st-awaiting-fg: #a35c00;
   --st-transit-bg: #ece9ff;   --st-transit-fg: #5b3ddb;
+  --st-ready-bg: #e1f0ff;     --st-ready-fg: #0a5cb8;
   --st-return-bg: #ffe9ec;    --st-return-fg: #c0334a;
   --st-done-bg: #e3f7ec;      --st-done-fg: #1a7f4b;
   --st-problem-bg: #ffe3e3;   --st-problem-fg: #c2261a;
@@ -174,6 +175,7 @@ body {
 
 .badge--awaiting { background: var(--st-awaiting-bg); color: var(--st-awaiting-fg); }
 .badge--transit  { background: var(--st-transit-bg);  color: var(--st-transit-fg); }
+.badge--ready    { background: var(--st-ready-bg);    color: var(--st-ready-fg); }
 .badge--return   { background: var(--st-return-bg);   color: var(--st-return-fg); }
 .badge--done     { background: var(--st-done-bg);     color: var(--st-done-fg); }
 .badge--problem  { background: var(--st-problem-bg);  color: var(--st-problem-fg); }

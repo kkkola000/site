@@ -64,13 +64,14 @@ test('вся статусная модель раскладывается по �
     DELIVERY_AT_START_SORT: 'transit',
     DELIVERY_TRANSPORTATION: 'transit',
     DELIVERY_TRANSPORTATION_RECIPIENT: 'transit',
-    DELIVERY_ARRIVED_PICKUP_POINT: 'transit',
-    CONFIRMATION_CODE_RECEIVED: 'transit',
     DELIVERY_TIME_INTERVALS_UPDATED: 'transit',
     DELIVERY_ATTEMPT_FAILED: 'transit',
 
+    DELIVERY_ARRIVED_PICKUP_POINT: 'ready',
+    CONFIRMATION_CODE_RECEIVED: 'ready',
+    PARTICULARLY_DELIVERED: 'ready',
+
     DELIVERY_TRANSMITTED_TO_RECIPIENT: 'done',
-    PARTICULARLY_DELIVERED: 'done',
     DELIVERY_DELIVERED: 'done',
     CANCELLED: 'done',
 
@@ -88,6 +89,16 @@ test('вся статусная модель раскладывается по �
     // У каждого известного статуса есть человекочитаемое название, не код.
     assert.ok(resolved.label && resolved.label !== status, `${status}: нет названия`);
   }
+});
+
+test('три статуса на точке выдачи показываются одним понятным статусом', () => {
+  // На складе и в ПВЗ важно одно: заказ на месте и ждёт получателя.
+  for (const status of ['DELIVERY_ARRIVED_PICKUP_POINT', 'CONFIRMATION_CODE_RECEIVED', 'PARTICULARLY_DELIVERED']) {
+    const resolved = resolveStatus(status, '');
+    assert.equal(resolved.group, 'ready', status);
+    assert.equal(resolved.label, 'Готов к вручению', status);
+  }
+  assert.ok(TABS.some((tab) => tab.id === 'ready' && tab.title === 'Готов к вручению'));
 });
 
 test('основные статусы цепочки отмечены как основные', () => {

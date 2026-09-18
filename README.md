@@ -10,7 +10,7 @@
 
 1. **Поиск** — по номеру заказа, названию товара, артикулу, трек-номеру,
    штрихкоду грузоместа, адресу и получателю. Ищет по всем словам запроса сразу.
-2. **Разделы** — Все · Ожидает отгрузки · В пути · Возврат · Завершены,
+2. **Разделы** — Все · Ожидает отгрузки · В пути · Готов к вручению · Возврат · Завершены,
    со счётчиками по текущему поисковому запросу.
 3. **Список заказов**, сгруппированный по дате доставки. В карточке:
    * статус;
@@ -236,12 +236,17 @@ npm start                # боевой запуск (нужен .env с ток�
 | Раздел | Статусы |
 |---|---|
 | **Ожидает отгрузки** | `VALIDATING_ERROR`, `CREATED`, `DELIVERY_PROCESSING_STARTED`, `SORTING_CENTER_LOADED` |
-| **В пути** | `SORTING_CENTER_AT_START`, `SORTING_CENTER_PREPARED`, `SORTING_CENTER_TRANSMITTED`, `DELIVERY_AT_START`, `DELIVERY_AT_START_SORT`, `DELIVERY_TRANSPORTATION`, `DELIVERY_TRANSPORTATION_RECIPIENT`, `DELIVERY_ARRIVED_PICKUP_POINT`, `CONFIRMATION_CODE_RECEIVED`, `DELIVERY_TIME_INTERVALS_UPDATED`, `DELIVERY_ATTEMPT_FAILED` |
+| **В пути** | `SORTING_CENTER_AT_START`, `SORTING_CENTER_PREPARED`, `SORTING_CENTER_TRANSMITTED`, `DELIVERY_AT_START`, `DELIVERY_AT_START_SORT`, `DELIVERY_TRANSPORTATION`, `DELIVERY_TRANSPORTATION_RECIPIENT`, `DELIVERY_TIME_INTERVALS_UPDATED`, `DELIVERY_ATTEMPT_FAILED` |
+| **Готов к вручению** | `DELIVERY_ARRIVED_PICKUP_POINT`, `CONFIRMATION_CODE_RECEIVED`, `PARTICULARLY_DELIVERED` |
 | **Возврат** | `SORTING_CENTER_RETURN_RETURNED`, `RETURN_TRANSPORTATION_STARTED`, `RETURN_ARRIVED_DELIVERY`, `RETURN_READY_FOR_PICKUP`, `RETURN_RETURNED` |
-| **Завершены** | `DELIVERY_TRANSMITTED_TO_RECIPIENT`, `PARTICULARLY_DELIVERED`, `DELIVERY_DELIVERED`, `CANCELLED` |
+| **Завершены** | `DELIVERY_TRANSMITTED_TO_RECIPIENT`, `DELIVERY_DELIVERED`, `CANCELLED` |
 
 Граница между «Ожидает отгрузки» и «В пути» — `SORTING_CENTER_AT_START`:
 до него заказ ещё оформляется, после — физически принят в сортировочном центре.
+
+Три статуса точки выдачи показываются одним понятным статусом «Готов к вручению»
+и вынесены в свой раздел: заказ доехал и ждёт получателя, дальше нужно действие
+человека, а не перевозчика.
 
 `VALIDATING_ERROR` и `DELIVERY_ATTEMPT_FAILED` подсвечиваются красным бейджем
 как требующие внимания. Основные статусы цепочки (в документации выделены
