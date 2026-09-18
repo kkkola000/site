@@ -238,31 +238,42 @@ body {
 /* Шкала статусов: точки по числу событий, подписаны три из них.
    Линия рисуется между соседними точками, поэтому у последней её нет. */
 .track {
-  display: flex;
-  align-items: flex-start;
+  position: relative;
   list-style: none;
   margin: 0;
   padding: 0;
+  min-height: 58px;
 }
 
-.track__point {
-  position: relative;
-  flex: 1 1 0;
-  min-width: 0;
-  padding-right: 12px;
-}
-
-.track__point:last-child { flex: 0 1 auto; padding-right: 0; text-align: right; }
-
-.track__point:not(:last-child)::after {
+/* Линия рисуется один раз на всю шкалу: от центра первой точки до центра
+   последней. Пройденная часть закрашивается по --progress, поэтому у
+   завершённого заказа она доходит ровно до конца. */
+.track::before,
+.track::after {
   content: "";
   position: absolute;
-  left: 18px;
-  right: 2px;
-  top: 6px;
+  top: 5px;
+  left: 6px;
   height: 2px;
-  background: var(--line);
 }
+
+.track::before { right: 6px; background: var(--line); }
+.track::after { width: calc((100% - 12px) * var(--progress, 0)); background: var(--accent); }
+
+.track__point {
+  position: absolute;
+  top: 0;
+  left: var(--at, 0%);
+  transform: translateX(-50%);
+  max-width: 24%;
+  text-align: center;
+}
+
+/* Крайние этапы прижимаются к краям шкалы, чтобы подписи не обрезались. */
+.track__point:first-child { transform: none; text-align: left; }
+.track__point:last-child { transform: translateX(-100%); text-align: right; }
+.track__point:first-child,
+.track__point:last-child { max-width: 30%; }
 
 .track__dot {
   position: relative;
@@ -272,10 +283,11 @@ body {
   height: 12px;
   border-radius: 50%;
   background: #d7dce3;
-  margin-left: 2px;
+  margin: 0 auto;
 }
 
-.track__point:last-child .track__dot { margin-left: auto; margin-right: 2px; }
+.track__point:first-child .track__dot { margin-left: 0; }
+.track__point:last-child .track__dot { margin-right: 0; }
 
 /* Пройденные и текущий этап — синие, будущие остаются серыми. */
 .track__point.is-done .track__dot,
@@ -283,12 +295,11 @@ body {
 .track__point.is-current .track__dot { box-shadow: 0 0 0 4px rgba(0, 91, 255, .15); }
 .track__point.is-problem .track__dot { background: var(--st-problem-fg); box-shadow: 0 0 0 4px rgba(194, 38, 26, .15); }
 
-/* Линия до пройденного этапа тоже закрашивается. */
-.track__point.is-done::after { background: var(--accent); }
+
 
 .track__text { display: block; margin-top: 8px; }
 .track__label { display: block; font-size: 13px; color: var(--muted); }
-.track__time { display: block; font-size: 12px; color: #9aa5b1; margin-top: 2px; }
+.track__time { display: block; font-size: 12px; color: #9aa5b1; margin-top: 2px; white-space: nowrap; }
 
 /* Текущий статус — то, ради чего смотрят на карточку. */
 .track__point.is-done .track__label { color: var(--text); }
@@ -419,7 +430,31 @@ select.field__input { cursor: pointer; }
 
   /* На телефоне горизонтальная шкала не читается — подписи рвутся по буквам,
      поэтому те же этапы разворачиваем в столбец. */
-  .track { display: block; }
+  .track { display: block; min-height: 0; }
+  .track::before, .track::after { display: none; }
+
+  .track__point,
+  .track__point:first-child,
+  .track__point:last-child {
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    max-width: none;
+    text-align: left;
+  }
+
+  .track__dot,
+  .track__point:first-child .track__dot,
+  .track__point:last-child .track__dot { margin: 2px 0 0; }
+
+  .track__point:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    background: var(--line);
+  }
+
+  .track__point.is-done:not(:last-child)::after { background: var(--accent); }
 
   .track__point,
   .track__point:last-child {

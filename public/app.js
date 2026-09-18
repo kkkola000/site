@@ -69,6 +69,14 @@ function formatShort(iso) {
     .replace('.,', ',');
 }
 
+// Короткая дата без времени — для ориентировочной даты на шкале.
+function formatDay(iso) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
+}
+
 function formatInterval(interval) {
   if (!interval || (!interval.from && !interval.to)) return '';
   const time = (iso) => (iso ? new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
@@ -121,13 +129,22 @@ function buildStages(order, history) {
   // Заказ, закрытый не выдачей (отменён, возвращён), подписывается по факту.
   const finishedOtherwise = !['DELIVERY_DELIVERED', 'DELIVERY_TRANSMITTED_TO_RECIPIENT'].includes(order.status.code);
 
+  // Плановая дата доставки — из интервала заказа: пока заказ не выдан,
+  // она показывается у последнего этапа как ориентир.
+  const planned = order.delivery?.interval?.from || '';
+
   return stages.map((stage, index) => {
     let title = stage.id === 'ready' && isReturn ? stage.returnTitle || stage.title : stage.title;
     if (stage.id === 'done' && index === currentIndex && finishedOtherwise) title = order.status.label;
 
+    const reached = timeOf(stage.id);
+    // Плановая дата подписывается коротко, иначе подпись крайнего этапа
+    // переносится и вылезает за карточку.
+    const time = reached || (stage.id === 'done' && planned ? `≈ ${formatDay(planned)}` : '');
+
     return {
       title,
-      time: timeOf(stage.id),
+      time,
       done: index < currentIndex,
       current: index === currentIndex,
       problem: index === currentIndex && order.status.problem,
@@ -139,22 +156,29 @@ function trackHtml(order, history) {
   const stages = buildStages(order, history);
   if (!stages.length) return '';
 
-  const points = stages.map((stage) => {
+  // Доля пройденного пути: по ней закрашивается сквозная линия шкалы.
+  const currentIndex = stages.findIndex((stage) => stage.current);
+  const progress = stages.length > 1 ? Math.max(0, currentIndex) / (stages.length - 1) : 1;
+
+  const points = stages.map((stage, index) => {
+    // Точки расставляем по долям шкалы, иначе линия не попадает в них:
+    // подписи этапов разной ширины.
+    const at = stages.length > 1 ? (index / (stages.length - 1)) * 100 : 0;
     const classes = ['track__point'];
     if (stage.done) classes.push('is-done');
     if (stage.current) classes.push('is-current');
     if (stage.problem) classes.push('is-problem');
 
-    return `<li class="${classes.join(' ')}">
+    return `<li class="${classes.join(' ')}" style="--at:${at}%">
       <span class="track__dot"></span>
       <span class="track__text">
         <span class="track__label">${escapeHtml(stage.title)}</span>
-        ${stage.time ? `<span class="track__time">${escapeHtml(formatShort(stage.time))}</span>` : ''}
+        ${stage.time ? `<span class="track__time">${escapeHtml(stage.time.startsWith('≈') ? stage.time : formatShort(stage.time))}</span>` : ''}
       </span>
     </li>`;
   });
 
-  return `<ol class="track">${points.join('')}</ol>`;
+  return `<ol class="track" style="--progress:${progress}">${points.join('')}</ol>`;
 }
 
 function orderCard(order) {
