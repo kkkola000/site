@@ -17,6 +17,7 @@ import {
 import { generateLabels, listWarehouses, YandexApiError, explain } from './yandex.js';
 import { settingsView, saveSettings, effectiveToken, effectiveLabelSize, isLabelSize } from './settings.js';
 import { resetStations } from './stations.js';
+import { pageSizeMm, matchesLabelSize } from './pdf.js';
 
 const PUBLIC_DIR = resolve(ROOT, 'public');
 
@@ -198,10 +199,20 @@ async function handleApi(req, res, url, pathname) {
       const requested = url.searchParams.get('size');
       const size = isLabelSize(requested) ? requested : effectiveLabelSize();
       const { buffer, contentType } = await generateLabels([requestId], { labelSize: size });
+
+      // Сверяем, что вернулся ярлык запрошенного размера: если Яндекс отдаёт A4
+      // вместо этикетки, это видно сразу в журнале и в заголовках ответа.
+      const actual = pageSizeMm(buffer);
+      if (actual && !matchesLabelSize(actual, size)) {
+        console.warn(`[label] запрошен ${size} мм, вернулся ${actual.label} мм (заказ ${requestId})`);
+      }
+
       res.writeHead(200, {
         'Content-Type': contentType.includes('pdf') ? 'application/pdf' : contentType,
         'Content-Disposition': `inline; filename="label-${requestId}-${size}.pdf"`,
         'Content-Length': buffer.length,
+        'X-Label-Requested-Mm': size,
+        'X-Label-Actual-Mm': actual ? actual.label : 'неизвестно',
       });
       res.end(buffer);
       return;

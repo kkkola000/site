@@ -58,8 +58,10 @@ async function startStub() {
       req.on('data', (chunk) => (body += chunk));
       req.on('end', () => {
         const size = JSON.parse(body || '{}').label_size_mm || '';
+        const [w, h] = size.split('x').map(Number);
+        const box = w && h ? `0 0 ${(w * 72) / 25.4} ${(h * 72) / 25.4}` : '0 0 595.28 841.89';
         res.writeHead(200, { 'Content-Type': 'application/pdf' });
-        res.end(Buffer.from(`%PDF-1.4 ${size}`));
+        res.end(Buffer.from(`%PDF-1.4 ${size}\n1 0 obj<</Type/Page/MediaBox [${box}]>>endobj`));
       });
       return;
     }
@@ -165,18 +167,22 @@ test('панель отдаёт заказы, разделы, поиск, кар
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('content-type'), 'application/pdf');
     assert.match(response.headers.get('content-disposition'), /58x40\.pdf/);
-    assert.equal(await response.text(), '%PDF-1.4 58x40');
+    // Панель сверяет размер страницы в самом PDF: видно, что вернулась этикетка, а не A4.
+    assert.equal(response.headers.get('x-label-requested-mm'), '58x40');
+    assert.equal(response.headers.get('x-label-actual-mm'), '58x40');
+    assert.match(await response.text(), /^%PDF-1\.4 58x40/);
   });
 
   await t.test('формат можно выбрать в карточке заказа', async () => {
     const response = await get('/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label?size=100x150');
-    assert.equal(await response.text(), '%PDF-1.4 100x150');
+    assert.equal(response.headers.get('x-label-actual-mm'), '100x150');
+    assert.match(await response.text(), /^%PDF-1\.4 100x150/);
   });
 
   await t.test('неизвестный формат не уходит в API', async () => {
     // Иначе Яндекс Доставка ответит ошибкой вместо ярлыка.
     const response = await get('/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label?size=13x37');
-    assert.equal(await response.text(), '%PDF-1.4 58x40');
+    assert.match(await response.text(), /^%PDF-1\.4 58x40/);
   });
 
   await t.test('статика панели отдаётся, выход за public/ невозможен', async () => {
@@ -363,7 +369,8 @@ test('формат ярлыка по умолчанию меняется в на
   assert.equal(saved.labelSize, '75x120');
 
   const label = await fetch(`${panel.base}/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label`);
-  assert.equal(await label.text(), '%PDF-1.4 75x120');
+  assert.equal(label.headers.get('x-label-actual-mm'), '75x120');
+  assert.match(await label.text(), /^%PDF-1\.4 75x120/);
 
   // Недопустимое значение не затирает сохранённое.
   const ignored = await json('/api/settings', {
