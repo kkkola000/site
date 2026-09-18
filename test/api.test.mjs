@@ -172,8 +172,7 @@ test('панель отдаёт заказы, разделы, поиск, кар
     // Панель сверяет размер страницы в самом PDF: видно, что вернулась этикетка, а не A4.
     assert.equal(response.headers.get('x-label-requested-mm'), '58x40');
     assert.equal(response.headers.get('x-label-actual-mm'), '58x40');
-    // generate_type: many — так этикетка приходит нужного размера.
-    assert.match(await response.text(), /^%PDF-1\.4 58x40 many/);
+    assert.match(await response.text(), /^%PDF-1\.4 58x40 one/);
   });
 
   await t.test('формат можно выбрать в карточке заказа', async () => {
@@ -402,21 +401,21 @@ test('раскладка ярлыков на странице настраива
   const label = (query = '') =>
     fetch(`${panel.base}/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label${query}`).then((r) => r.text());
 
-  // По умолчанию — many, как в рабочем запросе к API.
-  assert.equal((await json('/api/settings')).labelLayout, 'many');
-  assert.match(await label(), /58x40 many$|58x40 many\n/);
+  // По умолчанию — one, как в рабочем запросе к API.
+  assert.equal((await json('/api/settings')).labelLayout, 'one');
+  assert.match(await label(), /58x40 one/);
 
   const saved = await json('/api/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ labelLayout: 'one' }),
+    body: JSON.stringify({ labelLayout: 'many' }),
   });
-  assert.equal(saved.labelLayout, 'one');
-  assert.match(await label(), /58x40 one/);
+  assert.equal(saved.labelLayout, 'many');
+  assert.match(await label(), /58x40 many/);
 
   // Разовая печать может переопределить раскладку, не меняя настройку.
-  assert.match(await label('?layout=many'), /58x40 many/);
-  assert.equal((await json('/api/settings')).labelLayout, 'one');
+  assert.match(await label('?layout=one'), /58x40 one/);
+  assert.equal((await json('/api/settings')).labelLayout, 'many');
 
   // Недопустимое значение не затирает сохранённое и не уходит в API.
   const ignored = await json('/api/settings', {
@@ -424,6 +423,6 @@ test('раскладка ярлыков на странице настраива
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ labelLayout: 'grid' }),
   });
-  assert.equal(ignored.labelLayout, 'one');
-  assert.match(await label('?layout=grid'), /58x40 one/);
+  assert.equal(ignored.labelLayout, 'many');
+  assert.match(await label('?layout=grid'), /58x40 many/);
 });

@@ -22,11 +22,11 @@ export const DEFAULT_LABEL_SIZE = '58x40';
 // Раскладка ярлыков на странице: one — один на страницу, many — максимум.
 // Для A4 этим задаётся, сколько этикеток ляжет на лист.
 export const LABEL_LAYOUTS = [
-  { value: 'many', title: 'Максимум ярлыков на странице' },
   { value: 'one', title: 'Один ярлык на страницу' },
+  { value: 'many', title: 'Максимум ярлыков на странице' },
 ];
 
-export const DEFAULT_LABEL_LAYOUT = 'many';
+export const DEFAULT_LABEL_LAYOUT = 'one';
 
 export function isLabelLayout(value) {
   return LABEL_LAYOUTS.some((layout) => layout.value === value);
