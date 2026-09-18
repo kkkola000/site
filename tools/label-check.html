@@ -1,259 +1,197 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Проверка ярлыка</title>
+<meta charset="UTF-8">
+<title>Яндекс Доставка — Получение ярлыка</title>
 <style>
-  :root {
-    --bg: #f2f3f7; --card: #fff; --text: #001a34; --muted: #707f8d;
-    --line: #e7eaef; --accent: #005bff; --ok-bg: #e3f7ec; --ok-fg: #1a7f4b;
-    --warn-bg: #ffe3e3; --warn-fg: #c2261a;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; padding: 24px; background: var(--bg); color: var(--text);
-    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-  }
-  .wrap { max-width: 760px; margin: 0 auto; }
-  h1 { font-size: 22px; margin: 0 0 6px; }
-  .lead { color: var(--muted); margin: 0 0 20px; }
-  .panel { background: var(--card); border-radius: 16px; padding: 20px; margin-bottom: 16px; }
-  .panel h2 { font-size: 16px; margin: 0 0 14px; }
-  .step { display: inline-block; width: 24px; height: 24px; border-radius: 50%; background: var(--accent);
-          color: #fff; font-size: 14px; font-weight: 600; text-align: center; line-height: 24px; margin-right: 8px; }
-  label { display: block; margin-bottom: 12px; }
-  .lbl { display: block; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
-  input, select {
-    width: 100%; height: 42px; padding: 0 12px; border: 1px solid var(--line);
-    border-radius: 10px; background: #fff; color: var(--text); font-size: 15px; outline: none;
-  }
-  input:focus, select:focus { border-color: var(--accent); }
-  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 20px; }
+  fieldset { margin-bottom: 16px; padding: 12px 16px; border: 1px solid #ccc; border-radius: 6px; }
+  legend { font-weight: bold; padding: 0 6px; }
+  label { display: block; margin: 8px 0 4px; font-size: 14px; }
+  input[type=text], select { width: 100%; padding: 6px 8px; box-sizing: border-box; font-size: 14px; }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
   button {
-    border: 0; border-radius: 10px; padding: 11px 16px; background: var(--accent);
-    color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+    background: #005bff; color: #fff; border: none; padding: 10px 18px;
+    font-size: 15px; border-radius: 6px; cursor: pointer;
   }
-  button.ghost { background: #eef0f4; color: var(--text); }
-  pre {
-    background: #0f1720; color: #e6edf3; border-radius: 12px; padding: 14px;
-    overflow-x: auto; font-size: 13px; line-height: 1.5; margin: 0 0 12px;
+  button:hover { background: #0047cc; }
+  button:disabled { background: #999; cursor: default; }
+  #status { margin: 10px 0; font-size: 14px; white-space: pre-wrap; }
+  #status.error { color: #c00; }
+  #status.ok { color: #0a0; }
+  pre#requestPreview, pre#result {
+    background: #1e1e1e; color: #d4d4d4; padding: 14px; border-radius: 6px;
+    overflow: auto; max-height: 600px; font-size: 13px; white-space: pre-wrap; word-break: break-word;
   }
-  .drop {
-    border: 2px dashed #c6cdd7; border-radius: 14px; padding: 28px; text-align: center;
-    color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s;
-  }
-  .drop.over { border-color: var(--accent); background: #f4f8ff; }
-  .verdict { border-radius: 12px; padding: 14px 16px; margin-top: 14px; font-size: 15px; }
-  .verdict.ok { background: var(--ok-bg); color: var(--ok-fg); }
-  .verdict.bad { background: var(--warn-bg); color: var(--warn-fg); }
-  .verdict.plain { background: #eef0f4; color: var(--muted); }
-  .verdict b { display: block; margin-bottom: 4px; }
-  .hint { color: var(--muted); font-size: 13px; margin-top: 10px; }
-  table { border-collapse: collapse; width: 100%; font-size: 14px; margin-top: 10px; }
-  td { padding: 6px 0; border-bottom: 1px solid var(--line); }
-  td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .hint { font-size: 12px; color: #666; margin-top: -2px; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>Проверка ярлыка Яндекс Доставки</h1>
-  <p class="lead">
-    Инструмент работает локально: ничего не отправляет и не сохраняет.
-    Он собирает команду запроса и измеряет страницу полученного PDF.
-  </p>
 
-  <div class="panel">
-    <h2><span class="step">1</span>Параметры запроса</h2>
+<h1>Яндекс Доставка — POST /api/b2b/platform/request/generate-labels</h1>
 
-    <label>
-      <span class="lbl">OAuth-токен (личный кабинет → Интеграция)</span>
-      <input id="token" type="password" placeholder="y2_..." autocomplete="off" spellcheck="false">
-    </label>
+<fieldset>
+  <legend>Авторизация</legend>
+  <label for="token">Bearer-токен</label>
+  <input type="text" id="token" placeholder="y2_...">
+  <div class="hint">Токен хранится только в памяти страницы и уходит лишь на b2b-authproxy.taxi.yandex.net.</div>
+</fieldset>
 
-    <label>
-      <span class="lbl">ID заказа в логистической платформе (request_id)</span>
-      <input id="request" type="text" placeholder="77241d8009bb46d0bff5c65a73077bcd-udp" autocomplete="off" spellcheck="false">
-    </label>
+<fieldset>
+  <legend>Параметры ярлыка</legend>
+  <label for="requestIds">request_ids</label>
+  <input type="text" id="requestIds" placeholder="77241d8009bb46d0bff5c65a73077bcd-udp">
+  <div class="hint">Один или несколько ID через запятую — уйдут массивом.</div>
 
-    <div class="row2">
-      <label>
-        <span class="lbl">Размер этикетки</span>
-        <select id="size">
-          <option value="58x40" selected>58 × 40 мм</option>
-          <option value="58x60">58 × 60 мм</option>
-          <option value="75x120">75 × 120 мм</option>
-          <option value="100x150">100 × 150 мм</option>
-          <option value="210x297">A4 (210 × 297 мм)</option>
-        </select>
-      </label>
-      <label>
-        <span class="lbl">Раскладка (generate_type)</span>
-        <select id="layout">
-          <option value="one" selected>one — один на страницу</option>
-          <option value="many">many — максимум на странице</option>
-        </select>
-      </label>
+  <div class="row">
+    <div>
+      <label for="size">label_size_mm</label>
+      <select id="size">
+        <option value="58x40" selected>58x40</option>
+        <option value="58x60">58x60</option>
+        <option value="75x120">75x120</option>
+        <option value="100x150">100x150</option>
+        <option value="210x297">210x297 (A4)</option>
+      </select>
+    </div>
+    <div>
+      <label for="generateType">generate_type</label>
+      <select id="generateType">
+        <option value="one" selected>one</option>
+        <option value="many">many</option>
+      </select>
     </div>
   </div>
 
-  <div class="panel">
-    <h2><span class="step">2</span>Выполните команду</h2>
-    <p class="hint" style="margin-top:0">
-      Запрос нельзя отправить прямо из браузера: API Яндекс Доставки не разрешает
-      обращения со сторонних страниц. Скопируйте команду и выполните её в терминале —
-      ярлык сохранится в файл <code>label.pdf</code>.
-    </p>
+  <label for="language">language</label>
+  <input type="text" id="language" value="ru">
+</fieldset>
 
-    <div class="row2" style="margin: 12px 0">
-      <button class="ghost" type="button" data-os="unix">macOS / Linux</button>
-      <button class="ghost" type="button" data-os="win">Windows PowerShell</button>
-    </div>
+<button id="sendBtn" onclick="sendRequest()">Получить ярлык</button>
+<div id="status"></div>
 
-    <pre id="command">…</pre>
-    <button type="button" id="copy">Скопировать команду</button>
-  </div>
+<h3>Тело запроса</h3>
+<pre id="requestPreview">{}</pre>
 
-  <div class="panel">
-    <h2><span class="step">3</span>Проверьте полученный файл</h2>
-    <div class="drop" id="drop">
-      Перетащите сюда <b>label.pdf</b> или нажмите, чтобы выбрать файл
-      <input type="file" id="file" accept="application/pdf,.pdf" hidden>
-    </div>
-    <div id="result"></div>
-  </div>
-</div>
+<h3>Результат</h3>
+<pre id="result">Здесь появится размер полученного PDF или текст ошибки.</pre>
 
 <script>
-const $ = (id) => document.getElementById(id);
-const HOST = 'https://b2b-authproxy.taxi.yandex.net';
-const PATH = '/api/b2b/platform/request/generate-labels';
-let os = 'unix';
+const URL_API = 'https://b2b-authproxy.taxi.yandex.net/api/b2b/platform/request/generate-labels';
+const PT_PER_MM = 72 / 25.4;
 
-function body() {
+['requestIds', 'size', 'generateType', 'language'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updatePreview);
+  document.getElementById(id).addEventListener('change', updatePreview);
+});
+
+function buildBody() {
+  const ids = document.getElementById('requestIds').value
+    .split(',').map(s => s.trim()).filter(s => s !== '');
+
   return {
-    request_ids: [$('request').value.trim() || 'ID_ЗАКАЗА'],
-    generate_type: $('layout').value,
-    label_size_mm: $('size').value,
-    language: 'ru',
+    request_ids: ids,
+    generate_type: document.getElementById('generateType').value,
+    label_size_mm: document.getElementById('size').value,
+    language: document.getElementById('language').value.trim() || 'ru'
   };
 }
 
-function renderCommand() {
-  const token = $('token').value.trim() || 'ВАШ_ТОКЕН';
-  const json = JSON.stringify(body());
-
-  $('command').textContent = os === 'win'
-    ? [
-        `$body = '${json}'`,
-        `Invoke-WebRequest -Uri "${HOST}${PATH}" -Method Post \``,
-        `  -Headers @{ Authorization = "Bearer ${token}" } \``,
-        `  -ContentType "application/json" -Body $body -OutFile label.pdf`,
-      ].join('\n')
-    : [
-        `curl -s -X POST "${HOST}${PATH}" \\`,
-        `  -H "Authorization: Bearer ${token}" \\`,
-        `  -H "Content-Type: application/json" \\`,
-        `  -d '${json}' \\`,
-        `  -o label.pdf`,
-      ].join('\n');
+function updatePreview() {
+  document.getElementById('requestPreview').textContent = JSON.stringify(buildBody(), null, 2);
 }
+updatePreview();
 
-for (const id of ['token', 'request', 'size', 'layout']) {
-  $(id).addEventListener('input', renderCommand);
-}
-
-for (const button of document.querySelectorAll('[data-os]')) {
-  button.addEventListener('click', () => {
-    os = button.dataset.os;
-    renderCommand();
-  });
-}
-
-$('copy').addEventListener('click', async () => {
-  await navigator.clipboard.writeText($('command').textContent);
-  $('copy').textContent = 'Скопировано';
-  setTimeout(() => ($('copy').textContent = 'Скопировать команду'), 1500);
-});
-
-// --- Размер страницы PDF ---
-const PT_PER_MM = 72 / 25.4;
-
+// Размер страницы PDF в миллиметрах — из MediaBox в начале файла.
 function pageSizeMm(buffer) {
-  // MediaBox лежит в начале файла; ищем в первых 256 КБ.
-  const bytes = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 256 * 1024));
+  const bytes = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 262144));
   const text = new TextDecoder('latin1').decode(bytes);
-  const match = text.match(/\/MediaBox\s*\[\s*([\d.+-]+)\s+([\d.+-]+)\s+([\d.+-]+)\s+([\d.+-]+)\s*\]/);
-  if (!match) return null;
+  const m = text.match(/\/MediaBox\s*\[\s*([\d.+-]+)\s+([\d.+-]+)\s+([\d.+-]+)\s+([\d.+-]+)\s*\]/);
+  if (!m) return null;
 
-  const [x1, y1, x2, y2] = match.slice(1, 5).map(Number);
-  if ([x1, y1, x2, y2].some((n) => !Number.isFinite(n))) return null;
-
-  const width = Math.round(Math.abs(x2 - x1) / PT_PER_MM);
-  const height = Math.round(Math.abs(y2 - y1) / PT_PER_MM);
-  return width && height ? { width, height } : null;
+  const w = Math.round(Math.abs(Number(m[3]) - Number(m[1])) / PT_PER_MM);
+  const h = Math.round(Math.abs(Number(m[4]) - Number(m[2])) / PT_PER_MM);
+  return w && h ? (w + 'x' + h) : null;
 }
 
-function matches(size, requested) {
-  const [w, h] = requested.split('x').map(Number);
-  const close = (a, b) => Math.abs(a - b) <= 2;
-  // Этикетка может быть повёрнута — сравниваем в обоих порядках.
-  return (close(size.width, w) && close(size.height, h)) || (close(size.width, h) && close(size.height, w));
-}
+async function sendRequest() {
+  const token = document.getElementById('token').value.trim();
+  const statusEl = document.getElementById('status');
+  const resultEl = document.getElementById('result');
+  const btn = document.getElementById('sendBtn');
+  const body = buildBody();
 
-function show(html) { $('result').innerHTML = html; }
+  statusEl.className = '';
+  statusEl.textContent = '';
 
-async function inspect(file) {
-  if (!file) return;
-  const buffer = await file.arrayBuffer();
-  const head = new TextDecoder('latin1').decode(new Uint8Array(buffer, 0, 5));
-
-  if (head !== '%PDF-') {
-    show(`<div class="verdict bad"><b>Это не PDF</b>Файл «${file.name}» не похож на ярлык.
-      Откройте его текстом: там может лежать ошибка от API вместо документа.</div>`);
+  if (!token) {
+    statusEl.className = 'error';
+    statusEl.textContent = 'Укажите Bearer-токен.';
+    return;
+  }
+  if (body.request_ids.length === 0) {
+    statusEl.className = 'error';
+    statusEl.textContent = 'Укажите хотя бы один request_id.';
     return;
   }
 
-  const size = pageSizeMm(buffer);
-  const requested = $('size').value;
+  btn.disabled = true;
+  statusEl.textContent = 'Отправка запроса...';
+  resultEl.textContent = '';
 
-  if (!size) {
-    show(`<div class="verdict plain"><b>Размер прочитать не удалось</b>
-      В файле не нашёлся MediaBox — вероятно, объекты сжаты.
-      Посмотрите размер страницы в свойствах документа в любом просмотрщике PDF.</div>`);
-    return;
+  try {
+    const response = await fetch(URL_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      statusEl.className = 'error';
+      statusEl.textContent = 'Ошибка: HTTP ' + response.status;
+      resultEl.textContent = await response.text();
+      return;
+    }
+
+    const buffer = await response.arrayBuffer();
+    const actual = pageSizeMm(buffer);
+
+    // Файл сразу сохраняем, чтобы его можно было отправить на принтер.
+    const url = URL.createObjectURL(new Blob([buffer], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'label-' + body.label_size_mm + '.pdf';
+    link.click();
+    URL.revokeObjectURL(url);
+
+    statusEl.className = actual === null || actual === body.label_size_mm ? 'ok' : 'error';
+    statusEl.textContent = 'Успешно: HTTP ' + response.status + ', файл сохранён.';
+
+    resultEl.textContent =
+      'Запрошено:     ' + body.label_size_mm + ' мм\n' +
+      'Страница PDF:  ' + (actual || 'не удалось прочитать') + ' мм\n' +
+      'Размер файла:  ' + (buffer.byteLength / 1024).toFixed(1) + ' КБ\n\n' +
+      (actual === null
+        ? 'MediaBox не найден — посмотрите размер страницы в свойствах PDF.'
+        : actual === body.label_size_mm
+          ? 'Формат совпал. Если печать всё равно выходит на A4 — дело в настройках\nпринтера: выберите нужную бумагу и масштаб «Фактический размер».'
+          : 'Формат не совпал: label_size_mm не применяется на стороне Яндекс Доставки.');
+
+  } catch (err) {
+    statusEl.className = 'error';
+    statusEl.textContent = 'Ошибка сети / CORS: ' + err.message +
+      '\nЕсли браузер блокирует запрос к b2b-authproxy.taxi.yandex.net, выполните его из терминала:' +
+      '\n\ncurl -s -X POST "' + URL_API + '" \\' +
+      '\n  -H "Authorization: Bearer ТОКЕН" -H "Content-Type: application/json" \\' +
+      "\n  -d '" + JSON.stringify(body) + "' -o label.pdf";
+    resultEl.textContent = '';
+  } finally {
+    btn.disabled = false;
   }
-
-  const info = `<table>
-      <tr><td>Файл</td><td>${file.name}, ${(file.size / 1024).toFixed(1)} КБ</td></tr>
-      <tr><td>Запрошено</td><td>${requested.replace('x', ' × ')} мм</td></tr>
-      <tr><td>Страница PDF</td><td>${size.width} × ${size.height} мм</td></tr>
-    </table>`;
-
-  show(matches(size, requested)
-    ? `<div class="verdict ok"><b>Размер правильный</b>
-        Яндекс вернул ярлык запрошенного формата. Если печать всё равно выходит на A4,
-        дело в принтере: в диалоге печати выберите бумагу нужного размера и масштаб
-        «Фактический размер», а не «По размеру страницы».</div>${info}`
-    : `<div class="verdict bad"><b>Формат не совпал</b>
-        Запрос отправлен верно, но пришёл документ другого размера — значит,
-        <code>label_size_mm</code> не применяется на стороне Яндекс Доставки.
-        С этими цифрами можно обращаться к менеджеру.</div>${info}`);
 }
-
-const drop = $('drop');
-drop.addEventListener('click', () => $('file').click());
-$('file').addEventListener('change', (event) => inspect(event.target.files[0]));
-
-for (const type of ['dragenter', 'dragover']) {
-  drop.addEventListener(type, (event) => { event.preventDefault(); drop.classList.add('over'); });
-}
-for (const type of ['dragleave', 'drop']) {
-  drop.addEventListener(type, (event) => { event.preventDefault(); drop.classList.remove('over'); });
-}
-drop.addEventListener('drop', (event) => inspect(event.dataTransfer.files[0]));
-
-renderCommand();
 </script>
+
 </body>
 </html>
