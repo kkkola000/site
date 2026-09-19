@@ -215,16 +215,33 @@ async function handleApi(req, res, url, pathname) {
       const size = isLabelSize(requested) ? requested : effectiveLabelSize();
       const requestedLayout = url.searchParams.get('layout');
       const layout = isLabelLayout(requestedLayout) ? requestedLayout : effectiveLabelLayout();
-      const { buffer, contentType } = await generateLabels([requestId], {
+      let { buffer, contentType } = await generateLabels([requestId], {
         labelSize: size,
         generateType: layout,
       });
 
       // Сверяем, что вернулся ярлык запрошенного размера: если Яндекс отдаёт A4
       // вместо этикетки, это видно сразу в журнале и в заголовках ответа.
-      const actual = pageSizeMm(buffer);
+      let actual = pageSizeMm(buffer);
+
       if (actual && !matchesLabelSize(actual, size)) {
         console.warn(`[label] запрошен ${size} мм, вернулся ${actual.label} мм (заказ ${requestId})`);
+
+        // Повтор в форме из примера документации: request_ids строкой, а не
+        // массивом. Если так размер применяется — отдаём этот ярлык.
+        const retry = await generateLabels([requestId], {
+          labelSize: size,
+          generateType: layout,
+          idsAsString: true,
+        }).catch(() => null);
+
+        const retryActual = retry ? pageSizeMm(retry.buffer) : null;
+        if (retry && matchesLabelSize(retryActual, size)) {
+          console.warn(`[label] повтор с request_ids строкой вернул ${retryActual?.label || size} мм — использую его`);
+          buffer = retry.buffer;
+          contentType = retry.contentType;
+          actual = retryActual;
+        }
       }
 
       res.writeHead(200, {

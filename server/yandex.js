@@ -148,22 +148,23 @@ export const getActualInfo = (requestId) =>
 // Тело запроса — по документации метода 4.01: request_ids (массив),
 // label_size_mm из перечня, language и generate_type.
 //
-// generate_type задаёт раскладку на листе A4 («одна на лист» или «максимум»),
-// к размеру самой этикетки он отношения не имеет. Для форматов этикеток поле
-// не отправляем: лишний параметр — вероятная причина того, что в ответ
-// приходит A4 вместо запрошенного размера.
+// generate_type задаёт раскладку на листе A4, но отправляется всегда: без него
+// размер этикетки всё равно не применялся, а API ожидает полное тело запроса.
 export const A4_LABEL_SIZE = '210x297';
 
 export const generateLabels = (
   requestIds,
-  { labelSize = DEFAULT_LABEL_SIZE, generateType = DEFAULT_LABEL_LAYOUT } = {},
+  { labelSize = DEFAULT_LABEL_SIZE, generateType = DEFAULT_LABEL_LAYOUT, idsAsString = false } = {},
 ) => {
+  const ids = Array.isArray(requestIds) ? requestIds : [requestIds];
   const body = {
-    request_ids: Array.isArray(requestIds) ? requestIds : [requestIds],
+    // Тип поля — массив строк, но пример в документации показывает одиночную
+    // строку. Если размер игнорируется, панель повторяет запрос в этой форме.
+    request_ids: idsAsString && ids.length === 1 ? ids[0] : ids,
     label_size_mm: labelSize,
     language: 'ru',
   };
-  if (labelSize === A4_LABEL_SIZE) body.generate_type = generateType;
+  body.generate_type = generateType;
 
   return call(ENDPOINTS.generateLabels, { raw: true, body });
 };
