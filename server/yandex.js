@@ -147,21 +147,18 @@ export const getActualInfo = (requestId) =>
 
 // Тело запроса ярлыка: request_ids, label_size_mm и language.
 //
-// request_ids передаём строкой, как в примере документации. generate_type
-// не отправляем: он задаёт раскладку на листе A4 и к размеру этикетки
-// отношения не имеет.
-export const generateLabels = (requestIds, { labelSize = DEFAULT_LABEL_SIZE } = {}) => {
-  const ids = Array.isArray(requestIds) ? requestIds : [requestIds];
-
-  return call(ENDPOINTS.generateLabels, {
+// request_ids — всегда массив: пример в документации показывает строку, но API
+// отвечает «array was expected, but string found». generate_type не отправляем:
+// он задаёт раскладку на листе A4 и к размеру этикетки отношения не имеет.
+export const generateLabels = (requestIds, { labelSize = DEFAULT_LABEL_SIZE } = {}) =>
+  call(ENDPOINTS.generateLabels, {
     raw: true,
     body: {
-      request_ids: ids.length === 1 ? ids[0] : ids,
+      request_ids: Array.isArray(requestIds) ? requestIds : [requestIds],
       label_size_mm: labelSize,
       language: 'ru',
     },
   });
-};
 
 export const listWarehouses = () => call(ENDPOINTS.warehousesList, { body: {} });
 

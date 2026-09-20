@@ -174,14 +174,15 @@ test('панель отдаёт заказы, разделы, поиск, кар
     // Панель сверяет размер страницы в самом PDF: видно, что вернулась этикетка, а не A4.
     assert.equal(response.headers.get('x-label-requested-mm'), '58x40');
     assert.equal(response.headers.get('x-label-actual-mm'), '58x40');
-    // Тело запроса: request_ids строкой, generate_type не отправляется.
-    assert.match(await response.text(), /^%PDF-1\.4 58x40 строка без-generate_type/);
+    // Тело запроса: request_ids массивом (строку API не принимает),
+    // generate_type не отправляется.
+    assert.match(await response.text(), /^%PDF-1\.4 58x40 массив без-generate_type/);
   });
 
   await t.test('формат можно выбрать в карточке заказа', async () => {
     const response = await get('/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label?size=100x150');
     assert.equal(response.headers.get('x-label-actual-mm'), '100x150');
-    assert.match(await response.text(), /^%PDF-1\.4 100x150 строка без-generate_type/);
+    assert.match(await response.text(), /^%PDF-1\.4 100x150 массив без-generate_type/);
   });
 
   await t.test('неизвестный формат не уходит в API', async () => {
