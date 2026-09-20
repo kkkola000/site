@@ -1,8 +1,15 @@
 import { readFileSync, existsSync } from 'node:fs';
+import tls from 'node:tls';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+// Требование Яндекс Доставки к интеграции: TLS 1.2 и выше. В Node это
+// умолчание, но фиксируем явно — иначе настройка окружения может его понизить
+// незаметно. Набор шифров остаётся стандартным для Node: устаревшие (RC4,
+// 3DES, экспортные) в него не входят.
+tls.DEFAULT_MIN_VERSION = 'TLSv1.2';
 
 // Минимальный .env-парсер: без зависимостей, значения из окружения приоритетнее файла.
 function loadEnvFile(file) {

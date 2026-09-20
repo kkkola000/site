@@ -204,3 +204,24 @@ test('этапы повторяют разделы панели', () => {
   const tabs = TABS.map((tab) => tab.id);
   for (const stage of STAGES) assert.ok(tabs.includes(stage.id), stage.id);
 });
+
+test('соединение с API идёт по TLS 1.2 и выше', async () => {
+  // Требование Яндекс Доставки: TLS 1.2+ и шифры по PCI DSS v4.
+  const tls = await import('node:tls');
+  await import('../server/config.js');
+
+  assert.equal(tls.DEFAULT_MIN_VERSION, 'TLSv1.2');
+
+  // Устаревших шифров в наборе нет. Записи вида «!RC4» — это запреты,
+  // поэтому смотрим только на разрешённые.
+  const enabled = tls.DEFAULT_CIPHERS.toUpperCase()
+    .split(':')
+    .filter((cipher) => cipher && !cipher.startsWith('!'));
+
+  for (const weak of ['RC4', '3DES', 'DES-CBC', 'MD5', 'NULL', 'EXPORT']) {
+    const found = enabled.find((cipher) => cipher.includes(weak));
+    assert.ok(!found, `в наборе шифров разрешён ${found}`);
+  }
+  // И современные наборы на месте.
+  assert.ok(enabled.some((cipher) => cipher.includes('AES_256_GCM') || cipher.includes('AES256-GCM')));
+});
