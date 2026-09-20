@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { effectiveToken, DEFAULT_LABEL_SIZE, DEFAULT_LABEL_LAYOUT } from './settings.js';
+import { effectiveToken, DEFAULT_LABEL_SIZE } from './settings.js';
 
 // Эндпоинты API «Доставка в другой день» (b2b-authproxy.taxi.yandex.net).
 // Источник: Список методов, раздел «3. Основные запросы».
@@ -145,28 +145,22 @@ export const getRequestHistory = (requestId) =>
 export const getActualInfo = (requestId) =>
   call(ENDPOINTS.requestActualInfo, { query: { request_id: requestId } });
 
-// Тело запроса — по документации метода 4.01: request_ids (массив),
-// label_size_mm из перечня, language и generate_type.
+// Тело запроса ярлыка: request_ids, label_size_mm и language.
 //
-// generate_type задаёт раскладку на листе A4, но отправляется всегда: без него
-// размер этикетки всё равно не применялся, а API ожидает полное тело запроса.
-export const A4_LABEL_SIZE = '210x297';
-
-export const generateLabels = (
-  requestIds,
-  { labelSize = DEFAULT_LABEL_SIZE, generateType = DEFAULT_LABEL_LAYOUT, idsAsString = false } = {},
-) => {
+// request_ids передаём строкой, как в примере документации. generate_type
+// не отправляем: он задаёт раскладку на листе A4 и к размеру этикетки
+// отношения не имеет.
+export const generateLabels = (requestIds, { labelSize = DEFAULT_LABEL_SIZE } = {}) => {
   const ids = Array.isArray(requestIds) ? requestIds : [requestIds];
-  const body = {
-    // Тип поля — массив строк, но пример в документации показывает одиночную
-    // строку. Если размер игнорируется, панель повторяет запрос в этой форме.
-    request_ids: idsAsString && ids.length === 1 ? ids[0] : ids,
-    label_size_mm: labelSize,
-    language: 'ru',
-  };
-  body.generate_type = generateType;
 
-  return call(ENDPOINTS.generateLabels, { raw: true, body });
+  return call(ENDPOINTS.generateLabels, {
+    raw: true,
+    body: {
+      request_ids: ids.length === 1 ? ids[0] : ids,
+      label_size_mm: labelSize,
+      language: 'ru',
+    },
+  });
 };
 
 export const listWarehouses = () => call(ENDPOINTS.warehousesList, { body: {} });

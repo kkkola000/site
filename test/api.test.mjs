@@ -59,11 +59,13 @@ async function startStub() {
       req.on('end', () => {
         const payload = JSON.parse(body || '{}');
         const size = payload.label_size_mm || '';
-        const layout = payload.generate_type === undefined ? 'нет' : payload.generate_type;
+        // Форма поля важна: по документации это строка, а не массив.
+        const ids = Array.isArray(payload.request_ids) ? 'массив' : 'строка';
+        const extra = payload.generate_type === undefined ? 'без-generate_type' : 'есть-generate_type';
         const [w, h] = size.split('x').map(Number);
         const box = w && h ? `0 0 ${(w * 72) / 25.4} ${(h * 72) / 25.4}` : '0 0 595.28 841.89';
         res.writeHead(200, { 'Content-Type': 'application/pdf' });
-        res.end(Buffer.from(`%PDF-1.4 ${size} ${layout}\n1 0 obj<</Type/Page/MediaBox [${box}]>>endobj`));
+        res.end(Buffer.from(`%PDF-1.4 ${size} ${ids} ${extra}\n1 0 obj<</Type/Page/MediaBox [${box}]>>endobj`));
       });
       return;
     }
@@ -172,13 +174,14 @@ test('панель отдаёт заказы, разделы, поиск, кар
     // Панель сверяет размер страницы в самом PDF: видно, что вернулась этикетка, а не A4.
     assert.equal(response.headers.get('x-label-requested-mm'), '58x40');
     assert.equal(response.headers.get('x-label-actual-mm'), '58x40');
-    assert.match(await response.text(), /^%PDF-1\.4 58x40 one/);
+    // Тело запроса: request_ids строкой, generate_type не отправляется.
+    assert.match(await response.text(), /^%PDF-1\.4 58x40 строка без-generate_type/);
   });
 
   await t.test('формат можно выбрать в карточке заказа', async () => {
     const response = await get('/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label?size=100x150');
     assert.equal(response.headers.get('x-label-actual-mm'), '100x150');
-    assert.match(await response.text(), /^%PDF-1\.4 100x150 one/);
+    assert.match(await response.text(), /^%PDF-1\.4 100x150 строка без-generate_type/);
   });
 
   await t.test('неизвестный формат не уходит в API', async () => {
@@ -383,49 +386,6 @@ test('формат ярлыка по умолчанию меняется в на
   assert.equal(ignored.labelSize, '75x120');
 });
 
-test('раскладка ярлыков на странице настраивается', async (t) => {
-  const stub = await startStub();
-  t.after(() => stub.server.close());
-
-  const settingsFile = join(mkdtempSync(join(tmpdir(), 'settings-')), 'settings.json');
-  const panel = await startPanel({
-    PORT: '0',
-    HOST: '127.0.0.1',
-    YANDEX_API_BASE: stub.base,
-    YANDEX_OAUTH_TOKEN: TOKEN,
-    SETTINGS_FILE: settingsFile,
-  });
-  t.after(() => panel.child.kill());
-
-  const json = async (path, init) => (await fetch(`${panel.base}${path}`, init)).json();
-  const label = (query = '') =>
-    fetch(`${panel.base}/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label${query}`).then((r) => r.text());
-
-  assert.equal((await json('/api/settings')).labelLayout, 'one');
-  assert.match(await label(), /58x40 one/);
-
-  const saved = await json('/api/settings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ labelLayout: 'many' }),
-  });
-  assert.equal(saved.labelLayout, 'many');
-  assert.match(await label(), /58x40 many/);
-
-  // Разовая печать может переопределить раскладку, не меняя настройку.
-  assert.match(await label('?layout=one'), /58x40 one/);
-  assert.equal((await json('/api/settings')).labelLayout, 'many');
-
-  // Недопустимое значение не затирает сохранённое и не уходит в API.
-  const ignored = await json('/api/settings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ labelLayout: 'grid' }),
-  });
-  assert.equal(ignored.labelLayout, 'many');
-  assert.match(await label('?layout=grid'), /58x40 many/);
-});
-
 test('панель показывает, если задан не боевой хост API', async (t) => {
   const stub = await startStub();
   t.after(() => stub.server.close());
@@ -446,44 +406,6 @@ test('панель показывает, если задан не боевой �
   assert.equal(defaultView.apiBaseIsProduction, true);
 });
 
-
-test('если размер игнорируется, панель повторяет запрос формой из документации', async (t) => {
-  const calls = [];
-
-  // Заглушка ведёт себя как API, который применяет размер только тогда,
-  // когда request_ids передан строкой, а не массивом.
-  const stub = createServer((req, res) => {
-    let body = '';
-    req.on('data', (chunk) => (body += chunk));
-    req.on('end', () => {
-      const payload = JSON.parse(body || '{}');
-      calls.push(Array.isArray(payload.request_ids) ? 'массив' : 'строка');
-
-      const size = Array.isArray(payload.request_ids) ? '210x297' : payload.label_size_mm;
-      const [w, h] = size.split('x').map(Number);
-      res.writeHead(200, { 'Content-Type': 'application/pdf' });
-      res.end(Buffer.from(`%PDF-1.4\n1 0 obj<</Type/Page/MediaBox [0 0 ${(w * 72) / 25.4} ${(h * 72) / 25.4}]>>endobj`));
-    });
-  });
-  stub.listen(0, '127.0.0.1');
-  await once(stub, 'listening');
-  t.after(() => stub.close());
-
-  const panel = await startPanel({
-    PORT: '0',
-    HOST: '127.0.0.1',
-    YANDEX_API_BASE: `http://127.0.0.1:${stub.address().port}`,
-    YANDEX_OAUTH_TOKEN: TOKEN,
-  });
-  t.after(() => panel.child.kill());
-
-  const response = await fetch(`${panel.base}/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp/label`);
-  assert.equal(response.status, 200);
-
-  // Сначала обычная форма, затем повтор строкой — и в панель уходит нужный размер.
-  assert.deepEqual(calls, ['массив', 'строка']);
-  assert.equal(response.headers.get('x-label-actual-mm'), '58x40');
-});
 
 test('когда размер сразу правильный, повторного запроса нет', async (t) => {
   const stub = await startStub();

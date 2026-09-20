@@ -15,15 +15,7 @@ import {
   resetCache,
 } from './orders.js';
 import { generateLabels, listWarehouses, YandexApiError, explain } from './yandex.js';
-import {
-  settingsView,
-  saveSettings,
-  effectiveToken,
-  effectiveLabelSize,
-  isLabelSize,
-  effectiveLabelLayout,
-  isLabelLayout,
-} from './settings.js';
+import { settingsView, saveSettings, effectiveToken, effectiveLabelSize, isLabelSize } from './settings.js';
 import { resetStations } from './stations.js';
 import { pageSizeMm, matchesLabelSize } from './pdf.js';
 
@@ -133,12 +125,7 @@ async function handleApi(req, res, url, pathname) {
     }
     if (req.method === 'POST') {
       const body = await readJsonBody(req);
-      saveSettings({
-        token: body.token,
-        stationIds: body.stationIds,
-        labelSize: body.labelSize,
-        labelLayout: body.labelLayout,
-      });
+      saveSettings({ token: body.token, stationIds: body.stationIds, labelSize: body.labelSize });
       // Новый токен — новые данные: старый снимок и справочник складов сбрасываем.
       resetCache();
       resetStations();
@@ -213,35 +200,13 @@ async function handleApi(req, res, url, pathname) {
       // Размер берём из запроса, если он допустимый, иначе — из настроек панели.
       const requested = url.searchParams.get('size');
       const size = isLabelSize(requested) ? requested : effectiveLabelSize();
-      const requestedLayout = url.searchParams.get('layout');
-      const layout = isLabelLayout(requestedLayout) ? requestedLayout : effectiveLabelLayout();
-      let { buffer, contentType } = await generateLabels([requestId], {
-        labelSize: size,
-        generateType: layout,
-      });
+      const { buffer, contentType } = await generateLabels([requestId], { labelSize: size });
 
       // Сверяем, что вернулся ярлык запрошенного размера: если Яндекс отдаёт A4
-      // вместо этикетки, это видно сразу в журнале и в заголовках ответа.
-      let actual = pageSizeMm(buffer);
-
+      // вместо этикетки, это видно в журнале и в заголовках ответа.
+      const actual = pageSizeMm(buffer);
       if (actual && !matchesLabelSize(actual, size)) {
         console.warn(`[label] запрошен ${size} мм, вернулся ${actual.label} мм (заказ ${requestId})`);
-
-        // Повтор в форме из примера документации: request_ids строкой, а не
-        // массивом. Если так размер применяется — отдаём этот ярлык.
-        const retry = await generateLabels([requestId], {
-          labelSize: size,
-          generateType: layout,
-          idsAsString: true,
-        }).catch(() => null);
-
-        const retryActual = retry ? pageSizeMm(retry.buffer) : null;
-        if (retry && matchesLabelSize(retryActual, size)) {
-          console.warn(`[label] повтор с request_ids строкой вернул ${retryActual?.label || size} мм — использую его`);
-          buffer = retry.buffer;
-          contentType = retry.contentType;
-          actual = retryActual;
-        }
       }
 
       res.writeHead(200, {
