@@ -80,6 +80,16 @@
 <h3>Результат</h3>
 <pre id="result">Здесь появится размер полученного PDF или текст ошибки.</pre>
 
+<fieldset style="margin-top:20px">
+  <legend>Проверить готовый PDF</legend>
+  <div class="hint" style="margin-bottom:8px">
+    Для файла, скачанного из личного кабинета Яндекс Доставки или полученного через curl:
+    страница будет измерена локально, никуда не отправляется.
+  </div>
+  <input type="file" id="pdfFile" accept="application/pdf,.pdf">
+  <pre id="fileResult" style="margin-top:12px">Файл не выбран.</pre>
+</fieldset>
+
 <script>
 const URL_API = 'https://b2b-authproxy.taxi.yandex.net/api/b2b/platform/request/generate-labels';
 const PT_PER_MM = 72 / 25.4;
@@ -121,6 +131,25 @@ function pageSizeMm(buffer) {
   const h = Math.round(Math.abs(Number(m[4]) - Number(m[2])) / PT_PER_MM);
   return w && h ? (w + 'x' + h) : null;
 }
+
+document.getElementById('pdfFile').addEventListener('change', async (event) => {
+  const file = event.target.files[0];
+  const out = document.getElementById('fileResult');
+  if (!file) return;
+
+  const buffer = await file.arrayBuffer();
+  const head = new TextDecoder('latin1').decode(new Uint8Array(buffer, 0, 5));
+  if (head !== '%PDF-') {
+    out.textContent = 'Это не PDF: ' + file.name;
+    return;
+  }
+
+  const actual = pageSizeMm(buffer);
+  out.textContent =
+    'Файл:          ' + file.name + '\n' +
+    'Страница PDF:  ' + (actual || 'не удалось прочитать') + ' мм\n' +
+    'Размер файла:  ' + (file.size / 1024).toFixed(1) + ' КБ';
+});
 
 async function sendRequest() {
   const token = document.getElementById('token').value.trim();
