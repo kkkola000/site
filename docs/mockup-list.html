@@ -1,3 +1,10 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Макет списка заказов</title>
+<style>
 :root {
   --bg: #f2f3f7;
   --card: #ffffff;
@@ -487,3 +494,263 @@ select.field__input { cursor: pointer; }
   .track__point:last-child .track__dot { margin: 2px 0 0; }
   .track__text { margin-top: 0; }
 }
+
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="search">
+      <svg class="search__icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+      <input type="search" placeholder="Номер заказа, товар, артикул, трек">
+    </div>
+    <button class="icon-btn" type="button" title="Обновить">
+      <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 5.7"></path><path d="M20 4v7h-7"></path></svg>
+    </button>
+    <button class="icon-btn" type="button" title="Настройки">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"></circle><path d="M19.4 13.5a7.7 7.7 0 000-3l1.8-1.4-1.9-3.2-2.1.9a7.6 7.6 0 00-2.6-1.5L14.2 2H9.8l-.4 2.3a7.6 7.6 0 00-2.6 1.5l-2.1-.9L2.8 8.1l1.8 1.4a7.7 7.7 0 000 3l-1.8 1.4 1.9 3.2 2.1-.9a7.6 7.6 0 002.6 1.5l.4 2.3h4.4l.4-2.3a7.6 7.6 0 002.6-1.5l2.1.9 1.9-3.2-1.8-1.4z"></path></svg>
+    </button>
+  </div>
+  <nav class="tabs">
+    <button class="tab" aria-selected="true">Все<span class="tab__count">12</span></button><button class="tab" aria-selected="false">Ожидает отгрузки<span class="tab__count">3</span></button><button class="tab" aria-selected="false">В пути<span class="tab__count">4</span></button><button class="tab" aria-selected="false">Готов к вручению<span class="tab__count">2</span></button><button class="tab" aria-selected="false">Возврат<span class="tab__count">1</span></button><button class="tab" aria-selected="false">Завершены<span class="tab__count">2</span></button>
+  </nav>
+</header>
+
+<main class="content">
+  <section>
+    <h2 class="date-head">Сегодня</h2>
+    <article class="card" tabindex="0">
+    <div class="card__cols">
+      <div class="cell">
+        <div class="cell__label">Яндекс Доставка</div>
+        <div class="cell__track">
+          <span>1035021893</span>
+          <button class="copy" type="button" title="Скопировать трек-номер">
+            <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 012-2h10"></path></svg>
+          </button>
+        </div>
+        <div class="cell__sub">29991724-0648-1</div>
+      </div>
+
+      <div class="cell"><div class="cell__line">Пеленальный матрасик Anex Tumi Fluff + Вкладыш Anex Liner для матрасика Tumi<span class="cell__count">1 шт</span></div></div>
+
+      <div class="cell">
+        <div class="cell__label">Страховка</div>
+        <div class="cell__line">8 900 ₽</div>
+      </div>
+
+      <div class="cell">
+        <div class="cell__label">До пункта выдачи</div>
+        <div class="cell__line">Санкт-Петербург, Липецк, улица М.И. Неделина, 15</div>
+      </div>
+
+      <div class="cell cell--status">
+        <span class="badge badge--ready">Готов к вручению</span>
+        <button class="btn btn--small btn--ghost" type="button">Печать</button>
+      </div>
+    </div>
+
+    <div class="card__track"><ol class="track" style="--progress:0.6666666666666666"><li class="track__point is-done" style="--at:0%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">Ожидает отгрузки</span>
+        <span class="track__time">10 сент, 13:41</span>
+      </span>
+    </li><li class="track__point is-done" style="--at:33.33333333333333%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">В пути</span>
+        <span class="track__time">16 сент, 08:30</span>
+      </span>
+    </li><li class="track__point is-current" style="--at:66.66666666666666%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">Готов к вручению</span>
+        <span class="track__time">18 сент, 09:05</span>
+      </span>
+    </li><li class="track__point" style="--at:100%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">Выдан</span>
+        <span class="track__time">≈ 23 сент</span>
+      </span>
+    </li></ol></div>
+  </article><article class="card" tabindex="0">
+    <div class="card__cols">
+      <div class="cell">
+        <div class="cell__label">Яндекс Доставка</div>
+        <div class="cell__track">
+          <span>786459112</span>
+          <button class="copy" type="button" title="Скопировать трек-номер">
+            <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 012-2h10"></path></svg>
+          </button>
+        </div>
+        <div class="cell__sub">29991724-0651-1</div>
+      </div>
+
+      <div class="cell"><div class="cell__line">Сумка ANEX для коляски Brown<span class="cell__count">1 шт</span></div></div>
+
+      <div class="cell">
+        <div class="cell__label">Страховка</div>
+        <div class="cell__line">23 000 ₽</div>
+      </div>
+
+      <div class="cell">
+        <div class="cell__label">Курьером до двери</div>
+        <div class="cell__line">Реутов, Юбилейный проспект, 12, к1</div>
+      </div>
+
+      <div class="cell cell--status">
+        <span class="badge badge--transit">Едет в пункт выдачи</span>
+        <button class="btn btn--small btn--ghost" type="button">Печать</button>
+      </div>
+    </div>
+
+    <div class="card__track"><ol class="track" style="--progress:0.3333333333333333"><li class="track__point is-done" style="--at:0%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">Ожидает отгрузки</span>
+        <span class="track__time">15 сент, 10:00</span>
+      </span>
+    </li><li class="track__point is-current" style="--at:33.33333333333333%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">В пути</span>
+        <span class="track__time">16 сент, 12:00</span>
+      </span>
+    </li><li class="track__point" style="--at:66.66666666666666%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">Готов к вручению</span>
+        
+      </span>
+    </li><li class="track__point" style="--at:100%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">Выдан</span>
+        <span class="track__time">≈ 24 сент</span>
+      </span>
+    </li></ol></div>
+  </article>
+  </section>
+  <section>
+    <h2 class="date-head">22 сентября</h2>
+    <article class="card" tabindex="0">
+    <div class="card__cols">
+      <div class="cell">
+        <div class="cell__label">Яндекс Доставка</div>
+        <div class="cell__track">
+          <span>1025014860</span>
+          <button class="copy" type="button" title="Скопировать трек-номер">
+            <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 012-2h10"></path></svg>
+          </button>
+        </div>
+        <div class="cell__sub">29991724-0652-1</div>
+      </div>
+
+      <div class="cell"><div class="cell__line">Коляска ANEX e/type<span class="cell__count">2 шт</span></div><div class="cell__line">Дождевик ANEX<span class="cell__count">1 шт</span></div></div>
+
+      <div class="cell">
+        <div class="cell__label">Страховка</div>
+        <div class="cell__line">240 000 ₽</div>
+      </div>
+
+      <div class="cell">
+        <div class="cell__label">Курьером до двери</div>
+        <div class="cell__line">Москва, Пролетарский проспект, 19, к1, кв. 2</div>
+      </div>
+
+      <div class="cell cell--status">
+        <span class="badge badge--return">Возвращён на склад</span>
+        <button class="btn btn--small btn--ghost" type="button">Печать</button>
+      </div>
+    </div>
+
+    <div class="card__track"><ol class="track" style="--progress:0.6666666666666666"><li class="track__point is-done" style="--at:0%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">Ожидает отгрузки</span>
+        <span class="track__time">12 сент, 09:20</span>
+      </span>
+    </li><li class="track__point is-done" style="--at:33.33333333333333%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">В пути</span>
+        <span class="track__time">14 сент, 11:00</span>
+      </span>
+    </li><li class="track__point is-current" style="--at:66.66666666666666%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">Возврат</span>
+        <span class="track__time">17 сент, 16:40</span>
+      </span>
+    </li><li class="track__point" style="--at:100%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">Выдан</span>
+        
+      </span>
+    </li></ol></div>
+  </article><article class="card" tabindex="0">
+    <div class="card__cols">
+      <div class="cell">
+        <div class="cell__label">Яндекс Доставка</div>
+        <div class="cell__track">
+          <span>786459120</span>
+          <button class="copy" type="button" title="Скопировать трек-номер">
+            <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 012-2h10"></path></svg>
+          </button>
+        </div>
+        <div class="cell__sub">29991724-0649-1</div>
+      </div>
+
+      <div class="cell"><div class="cell__line">Автокресло ANEX m/type<span class="cell__count">1 шт</span></div></div>
+
+      <div class="cell">
+        <div class="cell__label">Страховка</div>
+        <div class="cell__line">56 000 ₽</div>
+      </div>
+
+      <div class="cell">
+        <div class="cell__label">До пункта выдачи</div>
+        <div class="cell__line">Москва, Ленинградский проспект, 37 к9</div>
+      </div>
+
+      <div class="cell cell--status">
+        <span class="badge badge--done">Доставлен</span>
+        <button class="btn btn--small btn--ghost" type="button">Печать</button>
+      </div>
+    </div>
+
+    <div class="card__track"><ol class="track" style="--progress:1"><li class="track__point is-done" style="--at:0%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">Ожидает отгрузки</span>
+        <span class="track__time">08 сент, 10:15</span>
+      </span>
+    </li><li class="track__point is-done" style="--at:33.33333333333333%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">В пути</span>
+        <span class="track__time">09 сент, 07:30</span>
+      </span>
+    </li><li class="track__point is-done" style="--at:66.66666666666666%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">Готов к вручению</span>
+        <span class="track__time">10 сент, 12:00</span>
+      </span>
+    </li><li class="track__point is-current" style="--at:100%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">Выдан</span>
+        <span class="track__time">11 сент, 18:22</span>
+      </span>
+    </li></ol></div>
+  </article>
+  </section>
+</main>
+
+<footer class="footer">Макет: данные вымышленные</footer>
+</body>
+</html>

@@ -19,7 +19,7 @@ export const reportPickup = {
         count: 1,
         name: 'Сумка ANEX для коляски Brown',
         article: 'AC/CB-02',
-        billing_details: { unit_price: 2300000, assessed_unit_price: 2300000, nds: 20 },
+        billing_details: { unit_price: 2300000, assessed_unit_price: 890000, nds: 20 },
         place_barcode: 'ANEX-01',
         photo_links: ['https://example.ru/anex-bag.jpg'],
         refused_count: 0,

@@ -19,6 +19,9 @@ export const LABEL_SIZES = [
 
 export const DEFAULT_LABEL_SIZE = '58x40';
 
+// Название компании в первом столбце списка заказов.
+export const DEFAULT_COMPANY_NAME = 'Яндекс Доставка';
+
 export function isLabelSize(value) {
   return LABEL_SIZES.some((size) => size.value === value);
 }
@@ -31,6 +34,7 @@ function load() {
     token: '',
     stationIds: [],
     labelSize: DEFAULT_LABEL_SIZE,
+    companyName: DEFAULT_COMPANY_NAME,
     updatedAt: '',
   };
   if (existsSync(FILE)) {
@@ -40,6 +44,7 @@ function load() {
         token: String(raw.token || '').trim(),
         stationIds: Array.isArray(raw.stationIds) ? raw.stationIds.filter(Boolean).map(String) : [],
         labelSize: isLabelSize(raw.labelSize) ? raw.labelSize : DEFAULT_LABEL_SIZE,
+        companyName: String(raw.companyName ?? DEFAULT_COMPANY_NAME).trim(),
         updatedAt: String(raw.updatedAt || ''),
       };
     } catch (err) {
@@ -49,7 +54,7 @@ function load() {
   return cache;
 }
 
-export function saveSettings({ token, stationIds, labelSize } = {}) {
+export function saveSettings({ token, stationIds, labelSize, companyName } = {}) {
   const current = load();
   const next = {
     // Пустая строка — осознанная очистка, undefined — поле не передавали.
@@ -62,6 +67,8 @@ export function saveSettings({ token, stationIds, labelSize } = {}) {
             .filter(Boolean),
     // Неизвестный размер игнорируем: API примет только значения из списка.
     labelSize: isLabelSize(labelSize) ? labelSize : current.labelSize,
+    // Пустое название — осознанный выбор: столбец останется без подписи.
+    companyName: companyName === undefined ? current.companyName : String(companyName).trim(),
     updatedAt: new Date().toISOString(),
   };
 
@@ -88,6 +95,10 @@ export function effectiveStationIds() {
 export function effectiveLabelSize() {
   const value = load().labelSize;
   return isLabelSize(value) ? value : DEFAULT_LABEL_SIZE;
+}
+
+export function effectiveCompanyName() {
+  return load().companyName;
 }
 
 export function tokenSource() {
@@ -118,6 +129,7 @@ export function settingsView() {
     stationIds: effectiveStationIds(),
     labelSize: effectiveLabelSize(),
     labelSizes: LABEL_SIZES,
+    companyName: effectiveCompanyName(),
     updatedAt: settings.updatedAt,
     apiBase: config.yandex.base,
     apiBaseIsProduction: config.yandex.base === PRODUCTION_API_BASE,

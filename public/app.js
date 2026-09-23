@@ -8,6 +8,7 @@ const state = {
   q: '',
   tabs: [],
   stages: [],
+  company: '',
   orders: new Map(),
   counts: {},
   groups: [],
@@ -101,111 +102,51 @@ function renderTabs() {
 
 // ---------- Карточка заказа в списке ----------
 
-function itemRow(item) {
-  return `<div class="item">
-    <div class="item__name">${escapeHtml(item.name)}</div>
-    <div class="item__count">${item.count} шт${item.refusedCount ? ` · отказ ${item.refusedCount}` : ''}</div>
-  </div>`;
-}
-
-// Шкала этапов: цепочка фиксированной длины, пройденные этапы заливаются
-// синим. Четвёртый этап подписывается «Возврат», если заказ поехал обратно.
-function buildStages(order, history) {
-  const stages = state.stages;
-  if (!stages.length) return [];
-
-  const passed = new Set((history || []).map((item) => item.stage));
-  const isReturn = order.status.stage === 'return' || passed.has('return');
-  const currentStage = order.status.stage === 'return' ? 'ready' : order.status.stage;
-  const currentIndex = Math.max(0, stages.findIndex((stage) => stage.id === currentStage));
-
-  // Время этапа — момент первого события, которое в него попало.
-  const timeOf = (id) => {
-    const wanted = id === 'ready' && isReturn ? ['ready', 'return'] : [id];
-    const event = (history || []).find((item) => wanted.includes(item.stage));
-    return event ? event.at : '';
-  };
-
-  // Заказ, закрытый не выдачей (отменён, возвращён), подписывается по факту.
-  const finishedOtherwise = !['DELIVERY_DELIVERED', 'DELIVERY_TRANSMITTED_TO_RECIPIENT'].includes(order.status.code);
-
-  // Плановая дата доставки — из интервала заказа: пока заказ не выдан,
-  // она показывается у последнего этапа как ориентир.
-  const planned = order.delivery?.interval?.from || '';
-
-  return stages.map((stage, index) => {
-    let title = stage.id === 'ready' && isReturn ? stage.returnTitle || stage.title : stage.title;
-    if (stage.id === 'done' && index === currentIndex && finishedOtherwise) title = order.status.label;
-
-    const reached = timeOf(stage.id);
-    // Плановая дата подписывается коротко, иначе подпись крайнего этапа
-    // переносится и вылезает за карточку.
-    const time = reached || (stage.id === 'done' && planned ? `≈ ${formatDay(planned)}` : '');
-
-    return {
-      title,
-      time,
-      done: index < currentIndex,
-      current: index === currentIndex,
-      problem: index === currentIndex && order.status.problem,
-    };
-  });
-}
-
-function trackHtml(order, history) {
-  const stages = buildStages(order, history);
-  if (!stages.length) return '';
-
-  // Доля пройденного пути: по ней закрашивается сквозная линия шкалы.
-  const currentIndex = stages.findIndex((stage) => stage.current);
-  const progress = stages.length > 1 ? Math.max(0, currentIndex) / (stages.length - 1) : 1;
-
-  const points = stages.map((stage, index) => {
-    // Точки расставляем по долям шкалы, иначе линия не попадает в них:
-    // подписи этапов разной ширины.
-    const at = stages.length > 1 ? (index / (stages.length - 1)) * 100 : 0;
-    const classes = ['track__point'];
-    if (stage.done) classes.push('is-done');
-    if (stage.current) classes.push('is-current');
-    if (stage.problem) classes.push('is-problem');
-
-    return `<li class="${classes.join(' ')}" style="--at:${at}%">
-      <span class="track__dot"></span>
-      <span class="track__text">
-        <span class="track__label">${escapeHtml(stage.title)}</span>
-        ${stage.time ? `<span class="track__time">${escapeHtml(stage.time.startsWith('≈') ? stage.time : formatShort(stage.time))}</span>` : ''}
-      </span>
-    </li>`;
-  });
-
-  return `<ol class="track" style="--progress:${progress}">${points.join('')}</ol>`;
-}
-
 function orderCard(order) {
   const badgeClass = order.status.problem ? 'problem' : order.status.group;
+  const items = order.items.length
+    ? order.items
+        .map(
+          (item) => `<div class="cell__line">${escapeHtml(item.name)}
+            <span class="cell__count">${item.count} шт${item.refusedCount ? ` · отказ ${item.refusedCount}` : ''}</span>
+          </div>`,
+        )
+        .join('')
+    : '<div class="cell__line">Состав заказа не передан</div>';
 
-  const chips = [
-    order.refusal === 'full' ? '<span class="chip chip--warn">Полный невыкуп</span>' : '',
-    order.refusal === 'partial' ? '<span class="chip chip--warn">Частичный невыкуп</span>' : '',
-    order.hasReturnPlaces ? '<span class="chip chip--warn">Возвратные грузоместа</span>' : '',
-    order.paymentMethodLabel ? `<span class="chip">${escapeHtml(order.paymentMethodLabel)}</span>` : '',
-    order.delivery.typeLabel ? `<span class="chip">${escapeHtml(order.delivery.typeLabel)}</span>` : '',
-  ].filter(Boolean).join('');
+  const address = order.delivery.address || order.delivery.name || '—';
 
   return `<article class="card" tabindex="0" data-id="${escapeHtml(order.id)}">
-    <span class="badge badge--${badgeClass}">${escapeHtml(order.status.label)}</span>
-    <div class="card__items">${order.items.map(itemRow).join('') || '<div class="item"><div class="item__name">Состав заказа не передан</div><div></div></div>'}</div>
-    <div class="card__rows">
-      <div class="row"><span class="row__label">Трек-номер</span><span class="row__value">${escapeHtml(order.trackNumber || '—')}</span></div>
-    </div>
-    ${chips ? `<div class="chips">${chips}</div>` : ''}
-    <div class="card__foot">
-      <div class="card__number">${escapeHtml(order.orderNumber)}</div>
-      <div class="card__foot-right">
-        <div class="card__price">${formatPrice(order.totalPrice, order.currency)}</div>
+    <div class="card__cols">
+      <div class="cell">
+        <div class="cell__label">${escapeHtml(state.company || '')}</div>
+        <div class="cell__track">
+          <span>${escapeHtml(order.trackNumber || '—')}</span>
+          ${order.trackNumber ? `<button class="copy" type="button" data-copy="${escapeHtml(order.trackNumber)}" title="Скопировать трек-номер" aria-label="Скопировать трек-номер">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 012-2h10"></path></svg>
+          </button>` : ''}
+        </div>
+        <div class="cell__sub">${escapeHtml(order.orderNumber)}</div>
+      </div>
+
+      <div class="cell">${items}</div>
+
+      <div class="cell">
+        <div class="cell__label">Страховка</div>
+        <div class="cell__line">${formatPrice(order.insurance, order.currency)}</div>
+      </div>
+
+      <div class="cell">
+        <div class="cell__label">${escapeHtml(order.delivery.typeLabel)}</div>
+        <div class="cell__line">${escapeHtml(address)}</div>
+      </div>
+
+      <div class="cell cell--status">
+        <span class="badge badge--${badgeClass}">${escapeHtml(order.status.label)}</span>
         <button class="btn btn--small btn--ghost" type="button" data-print="${escapeHtml(order.id)}">Печать</button>
       </div>
     </div>
+
     <div class="card__track" data-track="${escapeHtml(order.id)}"></div>
   </article>`;
 }
@@ -302,6 +243,7 @@ async function load({ force = false, showSkeleton = false } = {}) {
 
     state.tabs = data.tabs;
     state.stages = data.stages || [];
+    state.company = data.company || '';
     state.counts = data.counts;
     state.groups = data.groups;
     state.orders = new Map(data.groups.flatMap((group) => group.orders).map((order) => [order.id, order]));
@@ -428,6 +370,11 @@ function settingsForm(data) {
                placeholder="${data.tokenSet ? 'Оставьте пустым, чтобы не менять' : 'y2_...'}">
       </label>
       <label class="field">
+        <span class="field__label">Название компании в списке заказов</span>
+        <input class="field__input" type="text" name="companyName" autocomplete="off"
+               value="${escapeHtml(data.companyName || '')}" placeholder="Яндекс Доставка">
+      </label>
+      <label class="field">
         <span class="field__label">Формат ярлыка по умолчанию</span>
         <select class="field__input" name="labelSize">
           ${(data.labelSizes || []).map((size) => `<option value="${escapeHtml(size.value)}"${size.value === data.labelSize ? ' selected' : ''}>${escapeHtml(size.title)}</option>`).join('')}
@@ -483,7 +430,11 @@ async function openSettings() {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const token = form.token.value.trim();
-    const payload = { stationIds: form.stationIds.value, labelSize: form.labelSize.value };
+    const payload = {
+      stationIds: form.stationIds.value,
+      labelSize: form.labelSize.value,
+      companyName: form.companyName.value,
+    };
     // Пустое поле означает «не менять», а не «стереть токен».
     if (token) payload.token = token;
 
@@ -609,6 +560,17 @@ el.settings.addEventListener('click', openSettings);
 el.list.addEventListener('click', (event) => {
   if (event.target.closest('[data-open-settings]')) {
     openSettings();
+    return;
+  }
+
+  const copy = event.target.closest('[data-copy]');
+  if (copy) {
+    // Копирование не должно открывать карточку заказа.
+    event.stopPropagation();
+    navigator.clipboard.writeText(copy.dataset.copy).then(() => {
+      copy.classList.add('is-done');
+      setTimeout(() => copy.classList.remove('is-done'), 1200);
+    });
     return;
   }
 

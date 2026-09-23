@@ -41,6 +41,17 @@ test('курьерский заказ: адрес собирается из де
   assert.equal(order.trackNumber, 'aa11bb22cc33-udp');
 });
 
+test('страховка считается по оценочной стоимости товаров', () => {
+  // assessed_unit_price — сумма, на которую застрахован товар (в копейках).
+  const order = normalizeOrder(reportPickup, { stations });
+  assert.equal(order.insurance, 8900);
+  assert.equal(order.items[0].assessedPrice, 8900);
+
+  // У курьерского заказа две единицы по 120 000 ₽ оценочной стоимости.
+  const courier = normalizeOrder(reportCourier, { stations });
+  assert.equal(courier.insurance, courier.items[0].assessedPrice * 2);
+});
+
 test('поисковый индекс покрывает номер, товар, артикул и адрес', () => {
   const index = searchIndex(normalizeOrder(reportPickup, { stations }));
   for (const needle of ['lkf4565ml', '786459112', 'сумка anex', 'ac/cb-02', 'ленинградский']) {

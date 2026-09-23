@@ -15,7 +15,14 @@ import {
   resetCache,
 } from './orders.js';
 import { generateLabels, listWarehouses, YandexApiError, explain } from './yandex.js';
-import { settingsView, saveSettings, effectiveToken, effectiveLabelSize, isLabelSize } from './settings.js';
+import {
+  settingsView,
+  saveSettings,
+  effectiveToken,
+  effectiveLabelSize,
+  isLabelSize,
+  effectiveCompanyName,
+} from './settings.js';
 import { resetStations } from './stations.js';
 import { pageSizeMm, matchesLabelSize } from './pdf.js';
 
@@ -125,7 +132,12 @@ async function handleApi(req, res, url, pathname) {
     }
     if (req.method === 'POST') {
       const body = await readJsonBody(req);
-      saveSettings({ token: body.token, stationIds: body.stationIds, labelSize: body.labelSize });
+      saveSettings({
+        token: body.token,
+        stationIds: body.stationIds,
+        labelSize: body.labelSize,
+        companyName: body.companyName,
+      });
       // Новый токен — новые данные: старый снимок и справочник складов сбрасываем.
       resetCache();
       resetStations();
@@ -159,6 +171,7 @@ async function handleApi(req, res, url, pathname) {
       sendJson(res, 200, {
         tabs: TABS,
         stages: STAGES,
+        company: effectiveCompanyName(),
         counts: Object.fromEntries(TABS.map((tab) => [tab.id, 0])),
         groups: [],
         total: 0,
@@ -174,6 +187,7 @@ async function handleApi(req, res, url, pathname) {
     sendJson(res, 200, {
       tabs: TABS,
       stages: STAGES,
+      company: effectiveCompanyName(),
       counts: countByTab(snapshot.orders, { q }),
       groups: groupByDate(filtered).map((group) => ({
         date: group.date,

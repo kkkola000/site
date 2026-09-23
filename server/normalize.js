@@ -104,13 +104,17 @@ export function normalizeOrder(report, { stations = new Map() } = {}) {
     .filter(Boolean)
     .map((item) => {
       const unitPrice = money(item?.billing_details?.unit_price);
+      // Оценочная стоимость — сумма, на которую застрахован товар.
+      const assessedPrice = money(item?.billing_details?.assessed_unit_price);
       const count = Number(item?.count) || 0;
       return {
         name: clean(item?.name) || 'Без названия',
         article: clean(item?.article),
         count,
         unitPrice,
+        assessedPrice,
         total: unitPrice === null ? null : unitPrice * count,
+        assessedTotal: assessedPrice === null ? null : assessedPrice * count,
         barcode: clean(item?.place_barcode),
         refusedCount: Number(item?.refused_count) || 0,
       };
@@ -119,6 +123,7 @@ export function normalizeOrder(report, { stations = new Map() } = {}) {
   // full_items_price — общая стоимость предметов; если её нет, считаем по позициям.
   const itemsSum = items.reduce((sum, item) => sum + (item.total || 0), 0);
   const totalPrice = money(report.full_items_price) ?? itemsSum;
+  const insurance = items.reduce((sum, item) => sum + (item.assessedTotal || 0), 0);
 
   const station = (id) => (id ? stations.get(id) || null : null);
 
@@ -186,6 +191,7 @@ export function normalizeOrder(report, { stations = new Map() } = {}) {
     items,
     itemsCount: items.reduce((sum, item) => sum + item.count, 0),
     totalPrice,
+    insurance,
     deliveryCost: money(request?.billing_info?.delivery_cost) ?? 0,
     paymentMethod: clean(request?.billing_info?.payment_method),
     paymentMethodLabel:
