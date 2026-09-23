@@ -200,6 +200,7 @@ test('панель открывается без ошибок и рисует ш
       tracks: document.querySelectorAll('.track').length,
       stages: document.querySelectorAll('.track__point').length,
       statuses: document.querySelectorAll('.badge').length,
+      labels: [...document.querySelectorAll('.card .cell__label')].map((node) => node.textContent),
     })`,
   });
 
@@ -209,4 +210,10 @@ test('панель открывается без ошибок и рисует ш
   assert.equal(result.value.tracks, result.value.cards);
   assert.equal(result.value.stages, result.value.cards * 4);
   assert.equal(result.value.statuses, result.value.cards);
+  // В каждой карточке четыре подписи столбцов: компания, грузоместа, страховка, адрес.
+  assert.equal(result.value.labels.length, result.value.cards * 4);
+  assert.ok(
+    result.value.labels.some((text) => text.startsWith('Грузоместа')),
+    `подписи столбцов: ${result.value.labels.join(' | ')}`,
+  );
 });

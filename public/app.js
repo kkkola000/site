@@ -187,6 +187,8 @@ function orderCard(order) {
         .join('')
     : '<div class="cell__line">Состав заказа не передан</div>';
 
+  // Столбец с товарами подписан так же, как соседние: сверху число грузомест.
+  const places = order.places.length;
   // Для ПВЗ в первой строке адрес, во второй — название точки, если оно известно.
   const address = order.delivery.address || order.delivery.name || '—';
   const addressSub = order.delivery.address && order.delivery.name ? order.delivery.name : '';
@@ -204,7 +206,10 @@ function orderCard(order) {
         <div class="cell__sub">${escapeHtml(order.orderNumber)}</div>
       </div>
 
-      <div class="cell">${items}</div>
+      <div class="cell">
+        <div class="cell__label">Грузоместа${places ? `<span class="cell__count">${places}</span>` : ''}</div>
+        ${items}
+      </div>
 
       <div class="cell">
         <div class="cell__label">Страховка</div>
