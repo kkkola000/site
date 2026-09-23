@@ -432,6 +432,11 @@ select.field__input { cursor: pointer; }
   .row { grid-template-columns: 1fr; gap: 2px; }
   .card__price { font-size: 18px; }
 
+  /* На телефоне карточка короткая: шкала этапов и печать не нужны —
+     и то и другое доступно в карточке заказа. */
+  .card__track { display: none; }
+  .cell--status .btn { display: none; }
+
   /* На телефоне горизонтальная шкала не читается — подписи рвутся по буквам,
      поэтому те же этапы разворачиваем в столбец. */
   .track { display: block; min-height: 0; }
