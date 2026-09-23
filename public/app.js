@@ -187,7 +187,9 @@ function orderCard(order) {
         .join('')
     : '<div class="cell__line">Состав заказа не передан</div>';
 
+  // Для ПВЗ в первой строке адрес, во второй — название точки, если оно известно.
   const address = order.delivery.address || order.delivery.name || '—';
+  const addressSub = order.delivery.address && order.delivery.name ? order.delivery.name : '';
 
   return `<article class="card" tabindex="0" data-id="${escapeHtml(order.id)}">
     <div class="card__cols">
@@ -212,6 +214,7 @@ function orderCard(order) {
       <div class="cell">
         <div class="cell__label">${escapeHtml(order.delivery.typeLabel)}</div>
         <div class="cell__line">${escapeHtml(address)}</div>
+        ${addressSub ? `<div class="cell__sub">${escapeHtml(addressSub)}</div>` : ''}
       </div>
 
       <div class="cell cell--status">
@@ -394,7 +397,10 @@ function detailPanels(order) {
       <div class="card__rows">
         ${rows([
           ['Отгрузка', escapeHtml(order.shipment.address || order.shipment.name || order.shipment.stationId || '—') + (order.shipment.interval ? `<div class="row__hint">${escapeHtml(formatInterval(order.shipment.interval))}</div>` : '')],
-          ['Доставка', escapeHtml(order.delivery.address || order.delivery.name || '—') + (order.delivery.hints ? `<div class="row__hint">${escapeHtml(order.delivery.hints)}</div>` : '')],
+          ['Доставка', escapeHtml(order.delivery.address || order.delivery.name || '—') + [
+            order.delivery.address && order.delivery.name ? order.delivery.name : '',
+            order.delivery.hints,
+          ].filter(Boolean).map((hint) => `<div class="row__hint">${escapeHtml(hint)}</div>`).join('')],
           ['Способ', escapeHtml(order.delivery.typeLabel)],
           ['Интервал', escapeHtml(order.actual ? [order.actual.deliveryDate, order.actual.interval ? `${order.actual.interval.from}–${order.actual.interval.to}` : ''].filter(Boolean).join(', ') : formatInterval(order.delivery.interval))],
           ['Получатель', escapeHtml(order.recipient.name || '')],

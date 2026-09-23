@@ -1,6 +1,6 @@
 import { config } from './config.js';
 import { listRequests, getRequestInfo, getRequestHistory, getActualInfo, explain } from './yandex.js';
-import { getStations } from './stations.js';
+import { resolveStations } from './stations.js';
 import { normalizeOrder, searchIndex } from './normalize.js';
 import { effectiveStationIds } from './settings.js';
 import { TABS, resolveStatus } from './statuses.js';
@@ -14,12 +14,22 @@ function interval() {
   return { from: from.toISOString(), to: to.toISOString() };
 }
 
+// Идентификаторы точек, которые встретились в заказах: склад отгрузки и ПВЗ.
+function stationIdsOf(reports) {
+  return reports
+    .flatMap((report) => [
+      report?.request?.source?.platform_station?.platform_id,
+      report?.request?.destination?.platform_station?.platform_id,
+    ])
+    .filter(Boolean);
+}
+
 async function load() {
   const { from, to } = interval();
-  const [stations, reports] = await Promise.all([
-    getStations().catch(() => new Map()),
-    listRequests({ from, to }),
-  ]);
+  const reports = await listRequests({ from, to });
+  // Справочник нужен уже под конкретные точки: ПВЗ в список складов не входят,
+  // их адреса приходится дозапрашивать по идентификаторам из заказов.
+  const stations = await resolveStations(stationIdsOf(reports)).catch(() => new Map());
 
   let orders = reports
     .map((report) => normalizeOrder(report, { stations }))
@@ -149,8 +159,8 @@ export function stripInternal(order) {
 
 /** Карточка заказа с историей статусов и актуальной датой доставки. */
 export async function getOrderDetails(requestId) {
-  const stations = await getStations().catch(() => new Map());
   const report = await getRequestInfo({ requestId });
+  const stations = await resolveStations(stationIdsOf([report])).catch(() => new Map());
   const order = normalizeOrder(report, { stations });
   if (!order) return null;
 

@@ -11,6 +11,7 @@ export const ENDPOINTS = {
   requestCancel: { method: 'POST', path: '/api/b2b/platform/request/cancel' },
   generateLabels: { method: 'POST', path: '/api/b2b/platform/request/generate-labels' },
   warehousesList: { method: 'POST', path: '/api/b2b/platform/warehouses/list' },
+  warehousesRetrieve: { method: 'POST', path: '/api/b2b/platform/warehouses/retrieve' },
   pickupPointsList: { method: 'POST', path: '/api/b2b/platform/pickup-points/list' },
 };
 
@@ -161,6 +162,21 @@ export const generateLabels = (requestIds, { labelSize = DEFAULT_LABEL_SIZE } = 
   });
 
 export const listWarehouses = () => call(ENDPOINTS.warehousesList, { body: {} });
+
+/**
+ * Склад по идентификатору: POST /warehouses/retrieve, тело { station_id }.
+ * Ответ — { warehouse }, адрес лежит в location.address (город, улица, дом).
+ * Повторы не нужны: запрос точечный, для каждой неизвестной точки свой.
+ */
+export const retrieveWarehouse = (stationId) =>
+  call(ENDPOINTS.warehousesRetrieve, { body: { station_id: stationId }, retries: 0 });
+
+/**
+ * Пункты выдачи: POST /pickup-points/list. Тело — фильтр выборки; нам нужны
+ * конкретные точки, поэтому запрос уходит с pickup_points_ids.
+ * Ответ разбирается терпимо (см. stations.js): у ПВЗ и складов разные поля.
+ */
+export const listPickupPoints = (body = {}) => call(ENDPOINTS.pickupPointsList, { body });
 
 /**
  * Список заявок, созданных в интервале: POST /api/b2b/platform/requests/info.

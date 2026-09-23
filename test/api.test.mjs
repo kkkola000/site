@@ -40,6 +40,17 @@ async function startStub() {
         ],
       });
     }
+    if (url.pathname === '/api/b2b/platform/pickup-points/list') {
+      return json({
+        points: [
+          {
+            id: '01946f4f013c7337874ec2fb848a58a4',
+            name: 'Пункт выдачи Яндекс Маркета',
+            address: { full_address: 'Москва, Профсоюзная улица, 45' },
+          },
+        ],
+      });
+    }
     if (url.pathname === '/api/b2b/platform/request/info') return json(reportPickup);
     if (url.pathname === '/api/b2b/platform/request/history') {
       return json({
@@ -140,6 +151,9 @@ test('панель отдаёт заказы, разделы, поиск, кар
     assert.equal(order.totalPrice, 23000);
     // Адрес отгрузки подтянулся из warehouses/list.
     assert.equal(order.shipment.address, 'Москва, Ленинградский проспект, 27');
+    // Вместо идентификатора ПВЗ — его адрес из pickup-points/list.
+    assert.equal(order.delivery.address, 'Москва, Профсоюзная улица, 45');
+    assert.equal(order.delivery.name, 'Пункт выдачи Яндекс Маркета');
   });
 
   await t.test('фильтр по разделу', async () => {
@@ -160,6 +174,7 @@ test('панель отдаёт заказы, разделы, поиск, кар
   await t.test('карточка заказа с историей статусов', async () => {
     const data = await (await get('/api/orders/77241d8009bb46d0bff5c65a73077bcd-udp')).json();
     assert.equal(data.order.orderNumber, 'lKF4565ml');
+    assert.equal(data.order.delivery.address, 'Москва, Профсоюзная улица, 45');
     assert.equal(data.order.history.length, 2);
     // История отсортирована от свежего к старому.
     assert.equal(data.order.history[0].code, 'DELIVERY_TRANSPORTATION');

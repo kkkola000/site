@@ -34,6 +34,13 @@ const stub = createServer((req, res) => {
   if (path === '/api/b2b/platform/warehouses/list') {
     return json({ warehouses: [{ platform_station_id: 'e1139f6d-e34f-47a9-a55f-31f032a861a6', name: 'Склад ANEX', address: 'Москва, Ленинградский проспект, 27' }] });
   }
+  if (path === '/api/b2b/platform/pickup-points/list') {
+    return json({ points: [{
+      id: '01946f4f013c7337874ec2fb848a58a4',
+      name: 'Пункт выдачи Яндекс Маркета',
+      address: { full_address: 'Москва, Профсоюзная улица, 45' },
+    }] });
+  }
   if (path === '/api/b2b/platform/request/info') return json(reportPickup);
   if (path === '/api/b2b/platform/request/history') {
     return json({ state_history: [
