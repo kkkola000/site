@@ -180,6 +180,7 @@ body {
   border-radius: 10px;
   font-size: 14px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .badge--awaiting { background: var(--st-awaiting-bg); color: var(--st-awaiting-fg); }
@@ -192,7 +193,9 @@ body {
 /* Строка заказа: компания и трек, товары, страховка, адрес, статус. */
 .card__cols {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1.4fr) 130px minmax(0, 1.2fr) 150px;
+  /* Последний столбец — под самую длинную подпись статуса (212px): так она не
+     переносится, а столбцы всех карточек стоят на одной линии. */
+  grid-template-columns: 200px minmax(0, 1.4fr) 130px minmax(0, 1.2fr) minmax(212px, max-content);
   gap: 20px;
   align-items: start;
 }
@@ -237,6 +240,30 @@ body {
   gap: 10px;
   text-align: right;
 }
+
+/* Разметка, которой пользуется карточка заказа в боковой панели. */
+.card__rows { margin-top: 14px; display: grid; gap: 8px; }
+.row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 12px;
+  font-size: 15px;
+}
+.row__label { color: var(--muted); }
+.row__value { overflow-wrap: anywhere; }
+.row__hint { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.card__foot {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.card__number { color: var(--muted); font-size: 15px; }
+.card__price { font-size: 19px; font-weight: 700; white-space: nowrap; }
 
 .card__track { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
 

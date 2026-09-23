@@ -102,6 +102,79 @@ function renderTabs() {
 
 // ---------- Карточка заказа в списке ----------
 
+// Шкала этапов: цепочка фиксированной длины, пройденные этапы заливаются
+// синим. Четвёртый этап подписывается «Возврат», если заказ поехал обратно.
+function buildStages(order, history) {
+  const stages = state.stages;
+  if (!stages.length) return [];
+
+  const passed = new Set((history || []).map((item) => item.stage));
+  const isReturn = order.status.stage === 'return' || passed.has('return');
+  const currentStage = order.status.stage === 'return' ? 'ready' : order.status.stage;
+  const currentIndex = Math.max(0, stages.findIndex((stage) => stage.id === currentStage));
+
+  // Время этапа — момент первого события, которое в него попало.
+  const timeOf = (id) => {
+    const wanted = id === 'ready' && isReturn ? ['ready', 'return'] : [id];
+    const event = (history || []).find((item) => wanted.includes(item.stage));
+    return event ? event.at : '';
+  };
+
+  // Заказ, закрытый не выдачей (отменён, возвращён), подписывается по факту.
+  const finishedOtherwise = !['DELIVERY_DELIVERED', 'DELIVERY_TRANSMITTED_TO_RECIPIENT'].includes(order.status.code);
+
+  // Плановая дата доставки — из интервала заказа: пока заказ не выдан,
+  // она показывается у последнего этапа как ориентир.
+  const planned = order.delivery?.interval?.from || '';
+
+  return stages.map((stage, index) => {
+    let title = stage.id === 'ready' && isReturn ? stage.returnTitle || stage.title : stage.title;
+    if (stage.id === 'done' && index === currentIndex && finishedOtherwise) title = order.status.label;
+
+    const reached = timeOf(stage.id);
+    // Плановая дата подписывается коротко, иначе подпись крайнего этапа
+    // переносится и вылезает за карточку.
+    const time = reached || (stage.id === 'done' && planned ? `≈ ${formatDay(planned)}` : '');
+
+    return {
+      title,
+      time,
+      done: index < currentIndex,
+      current: index === currentIndex,
+      problem: index === currentIndex && order.status.problem,
+    };
+  });
+}
+
+function trackHtml(order, history) {
+  const stages = buildStages(order, history);
+  if (!stages.length) return '';
+
+  // Доля пройденного пути: по ней закрашивается сквозная линия шкалы.
+  const currentIndex = stages.findIndex((stage) => stage.current);
+  const progress = stages.length > 1 ? Math.max(0, currentIndex) / (stages.length - 1) : 1;
+
+  const points = stages.map((stage, index) => {
+    // Точки расставляем по долям шкалы, иначе линия не попадает в них:
+    // подписи этапов разной ширины.
+    const at = stages.length > 1 ? (index / (stages.length - 1)) * 100 : 0;
+    const classes = ['track__point'];
+    if (stage.done) classes.push('is-done');
+    if (stage.current) classes.push('is-current');
+    if (stage.problem) classes.push('is-problem');
+
+    return `<li class="${classes.join(' ')}" style="--at:${at}%">
+      <span class="track__dot"></span>
+      <span class="track__text">
+        <span class="track__label">${escapeHtml(stage.title)}</span>
+        ${stage.time ? `<span class="track__time">${escapeHtml(stage.time.startsWith('≈') ? stage.time : formatShort(stage.time))}</span>` : ''}
+      </span>
+    </li>`;
+  });
+
+  return `<ol class="track" style="--progress:${progress}">${points.join('')}</ol>`;
+}
+
 function orderCard(order) {
   const badgeClass = order.status.problem ? 'problem' : order.status.group;
   const items = order.items.length
