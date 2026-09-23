@@ -24,6 +24,32 @@ test('заказ до ПВЗ: цены из копеек, трек-номер и
   assert.equal(order.groupDate.slice(0, 10), '2026-09-17');
 });
 
+test('адрес ПВЗ берётся из самого заказа, когда точки нет в справочнике', () => {
+  const report = {
+    ...reportPickup,
+    request: {
+      ...reportPickup.request,
+      destination: {
+        ...reportPickup.request.destination,
+        platform_station: {
+          platform_id: '019db9ba679670c88a8eed71cad5e6c1',
+          name: 'Пункт выдачи Яндекс Маркета',
+          address: { full_address: 'Химки, Ленинградская улица, 1' },
+        },
+      },
+    },
+  };
+
+  const order = normalizeOrder(report, { stations: new Map() });
+  assert.equal(order.delivery.address, 'Химки, Ленинградская улица, 1');
+  assert.equal(order.delivery.name, 'Пункт выдачи Яндекс Маркета');
+});
+
+test('без адреса точки в карточке остаётся идентификатор ПВЗ', () => {
+  const order = normalizeOrder(reportPickup, { stations: new Map() });
+  assert.equal(order.delivery.address, 'ПВЗ 01946f4f013c7337874ec2fb848a58a4');
+});
+
 test('курьерский заказ: адрес собирается из деталей, возврат попадает в свой раздел', () => {
   const order = normalizeOrder(reportCourier, { stations });
   assert.equal(order.delivery.type, 'courier');

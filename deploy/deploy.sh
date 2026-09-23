@@ -253,7 +253,7 @@ sync_files() {
     # исключений здесь обязателен: без него обновление стёрло бы токен.
     rsync -a --delete --exclude '.git' --exclude 'node_modules' "${keep[@]}" "$src"/ "$dest"/
   else
-    for path in server public config deploy scripts test package.json .env.example README.md; do
+    for path in server public config deploy scripts tools test package.json .env.example README.md; do
       [[ -e "$src/$path" ]] || continue
       if [[ "$path" == "config" ]]; then
         cp -a "$src/config/." "$dest/config/"     # примеры конфигов, без своих файлов

@@ -28,6 +28,19 @@ export function formatAddress(details) {
   return [head, extra].filter(Boolean).join(', ');
 }
 
+// Точка иногда приходит прямо в заказе: platform_station может нести название
+// и адрес. Тогда справочник для неё не нужен.
+function stationFromNode(node) {
+  if (!node || typeof node !== 'object') return null;
+  const address =
+    (typeof node.address === 'string' ? clean(node.address) : '') ||
+    clean(node.address?.full_address) ||
+    clean(node.full_address) ||
+    formatAddress(node.address?.details || node.location?.details || node.details);
+  const name = clean(node.name) || clean(node.title);
+  return address || name ? { name, address } : null;
+}
+
 // Дополнительные детали адреса: подъезд/этаж/домофон/комментарий.
 function addressHints(details) {
   if (!details || typeof details !== 'object') return '';
@@ -128,7 +141,7 @@ export function normalizeOrder(report, { stations = new Map() } = {}) {
   const station = (id) => (id ? stations.get(id) || null : null);
 
   const sourceId = clean(request?.source?.platform_station?.platform_id);
-  const sourceStation = station(sourceId);
+  const sourceStation = station(sourceId) || stationFromNode(request?.source?.platform_station);
   const shipment = {
     stationId: sourceId,
     name: sourceStation?.name || '',
@@ -138,7 +151,7 @@ export function normalizeOrder(report, { stations = new Map() } = {}) {
 
   const destination = request?.destination || {};
   const destinationId = clean(destination?.platform_station?.platform_id);
-  const destinationStation = station(destinationId);
+  const destinationStation = station(destinationId) || stationFromNode(destination?.platform_station);
   const details = destination?.custom_location?.details || null;
   const isPickup = destination?.type === 'platform_station';
   const delivery = {

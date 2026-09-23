@@ -134,9 +134,18 @@ async function fetchPickupPoints(ids) {
   const wanted = new Set(ids);
   const found = new Map();
   try {
-    for (const point of extractList(await listPickupPoints({ pickup_points_ids: ids }))) {
+    const payload = await listPickupPoints({ pickup_points_ids: ids });
+    const list = extractList(payload);
+    for (const point of list) {
       if (!wanted.has(point.id)) continue;
       if (point.name || point.address) found.set(point.id, { name: point.name, address: point.address });
+    }
+    if (!found.size) {
+      // Ответ пришёл, но нужных точек в нём нет. Печатаем форму ответа: по ней
+      // видно, какое поле фильтра и какой список ждёт API (см. tools/pvz-curl.sh).
+      console.error(
+        `[stations] pickup-points/list: точек в ответе ${list.length}, ключи ответа: ${Object.keys(payload || {}).join(', ') || 'нет'}`,
+      );
     }
   } catch (err) {
     console.error('[stations] pickup-points/list недоступен:', err.message);
