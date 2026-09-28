@@ -17,6 +17,8 @@ OZON_SNIPPET="/etc/nginx/snippets/ozon-pack-access.conf"
 ACCESS_SNIPPET="/etc/nginx/snippets/anex-orders-access.conf"
 ALLOW_SUBNETS=""
 ADD_SUBNETS=""
+FOLLOW_OZON=0
+FOLLOW_SET=0
 ATTACH_SITE=""      # auto | путь к файлу сайта nginx
 DETACH_SITE=0
 MARK_BEGIN="# >>> anex-orders: панель заказов (добавлено deploy.sh) >>>"
@@ -67,6 +69,9 @@ usage() {
                         сети соседней панели Ozon Pack (VPN-подсеть).
   --add-subnet <сеть>   Дописать сеть или адрес к уже разрешённым, не перечисляя
                         остальные: --add-subnet 10.8.0.0/24, --add-subnet 1.2.3.4
+  --follow-ozon-access  Не вести свой список сетей: включить файл правил панели
+                        Ozon Pack. Сети правятся только у неё, панель следует
+                        за ними. Вернуть свой список: --allow-subnet <сеть>.
   --bind <адрес>        Слушать этот адрес напрямую, без nginx. Например
                         --bind 10.66.66.1 — вход по http://10.66.66.1:ПОРТ
   --attach-site auto    Добавить путь в уже работающий сайт nginx: панель
@@ -101,6 +106,7 @@ while [[ $# -gt 0 ]]; do
     --auth-password) AUTH_PASSWORD="${2:-}"; shift 2 ;;
     --allow-subnet) ALLOW_SUBNETS="${ALLOW_SUBNETS:+$ALLOW_SUBNETS,}${2:-}"; shift 2 ;;
     --add-subnet) ADD_SUBNETS="${ADD_SUBNETS:+$ADD_SUBNETS,}${2:-}"; shift 2 ;;
+    --follow-ozon-access) FOLLOW_OZON=1; FOLLOW_SET=1; shift ;;
     --bind) BIND_HOST="${2:-}"; BIND_SET=1; shift 2 ;;
     --attach-site) ATTACH_SITE="${2:-auto}"; shift 2 ;;
     --detach-site) DETACH_SITE=1; shift ;;
@@ -368,9 +374,44 @@ normalize_cidr() {
   printf '%d.%d.%d.%d/%d' $(( (net >> 24) & 255 )) $(( (net >> 16) & 255 )) $(( (net >> 8) & 255 )) $(( net & 255 )) "$prefix"
 }
 
-# Свой файл правил доступа: снипет соседа принадлежит его скриптам,
-# поэтому копируем из него только список сетей.
+# Файл правил доступа панели. Обычно свой: снипет соседа принадлежит его
+# скриптам, поэтому список сетей из него копируется. С --follow-ozon-access
+# вместо копии пишется include — тогда сети правятся только у соседа.
 write_access_snippet() {
+  local follow="$FOLLOW_OZON"
+  # Решение запоминается: обновление без флагов не должно его отменять.
+  if [[ $FOLLOW_SET -eq 0 && -f "$DIR/.env" ]]; then
+    [[ "$(read_env "$DIR/.env" FOLLOW_OZON_ACCESS)" == "1" ]] && follow=1
+  fi
+  # Явный список сетей возвращает панели собственные правила.
+  if [[ -n "$ALLOW_SUBNETS" && $FOLLOW_SET -eq 0 ]]; then follow=0; fi
+  if [[ $follow -eq 1 && -n "$ADD_SUBNETS" ]]; then
+    die "панель следует за правилами Ozon Pack: добавьте сеть в ${OZON_SNIPPET} либо перейдите на свой список — --allow-subnet <сеть>"
+  fi
+
+  if [[ $follow -eq 1 ]]; then
+    if [[ -f "$OZON_SNIPPET" ]]; then
+      mkdir -p "$(dirname "$ACCESS_SNIPPET")"
+      {
+        echo "# Правила доступа панель берёт у Ozon Pack: сети правятся в одном месте."
+        echo "# Вести свой список: deploy.sh --allow-subnet <сеть>"
+        echo "include ${OZON_SNIPPET};"
+      } > "$ACCESS_SNIPPET"
+
+      if [[ -f "$DIR/.env" ]]; then
+        set_env "$DIR/.env" FOLLOW_OZON_ACCESS 1
+        chown "$RUN_USER":"$RUN_USER" "$DIR/.env" 2>/dev/null || true
+      fi
+
+      ok "правила доступа берутся из ${OZON_SNIPPET}"
+      grep -qE '^[[:space:]]*allow[[:space:]]+all;' "$OZON_SNIPPET" &&
+        warn "в правилах Ozon Pack стоит allow all — панель тоже открыта всем, кто дойдёт до nginx"
+      return 0    # иначе функция вернёт код grep, а set -e оборвёт установку
+    fi
+    warn "у Ozon Pack нет файла правил ${OZON_SNIPPET} — беру его сети разово, в свой список"
+  fi
+  [[ -f "$DIR/.env" ]] && set_env "$DIR/.env" FOLLOW_OZON_ACCESS 0
+
   # Порядок источников: флаг запуска → сохранённый список → сети соседней панели.
   # Без сохранённого списка повторный запуск без флага открыл бы панель всем.
   local list="$ALLOW_SUBNETS"

@@ -194,6 +194,47 @@ test('повтор сети в списке не даёт дубля в снип
   assert.equal(lines.length, 1);
 });
 
+test('--follow-ozon-access: свой список сетей заменяется на include соседа', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'snippet-'));
+  const file = join(dir, 'access.conf');
+  const ozon = join(dir, 'ozon-access.conf');
+  writeFileSync(join(dir, '.env'), 'PORT=3010\nALLOW_SUBNETS=10.66.66.0/24\n');
+  writeFileSync(ozon, 'allow 127.0.0.1;\nallow 10.66.66.0/24;\ndeny all;\n');
+
+  const env = `ACCESS_SNIPPET="${file}"; OZON_SNIPPET="${ozon}"; DIR="${dir}"; RUN_USER="$(id -un)"`;
+  runBash(`${env}; FOLLOW_OZON=1; FOLLOW_SET=1; write_access_snippet`);
+
+  const conf = readFileSync(file, 'utf8');
+  assert.match(conf, new RegExp(`^include ${ozon};$`, 'm'));
+  assert.ok(!/^allow 10\./m.test(conf), 'своих allow быть не должно');
+  assert.match(readFileSync(join(dir, '.env'), 'utf8'), /^FOLLOW_OZON_ACCESS=1$/m);
+
+  // Обновление без флагов решение не отменяет.
+  runBash(`${env}; write_access_snippet`);
+  assert.match(readFileSync(file, 'utf8'), new RegExp(`^include ${ozon};$`, 'm'));
+
+  // Явный список возвращает панели свои правила.
+  runBash(`${env}; ALLOW_SUBNETS="10.8.0.0/24"; write_access_snippet`);
+  const own = readFileSync(file, 'utf8');
+  assert.match(own, /^allow 10\.8\.0\.0\/24;$/m);
+  assert.ok(!own.includes('include '), 'include должен уйти');
+  assert.match(readFileSync(join(dir, '.env'), 'utf8'), /^FOLLOW_OZON_ACCESS=0$/m);
+});
+
+test('без файла правил соседа панель возвращается к своему списку', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'snippet-'));
+  const file = join(dir, 'access.conf');
+  writeFileSync(join(dir, '.env'), 'PORT=3010\nALLOW_SUBNETS=10.66.66.0/24\n');
+
+  runBash(
+    `ACCESS_SNIPPET="${file}"; OZON_SNIPPET="${dir}/нет"; OZON_DIR="${dir}/нет"; DIR="${dir}"; RUN_USER="$(id -un)"; FOLLOW_OZON=1; FOLLOW_SET=1; write_access_snippet`,
+  );
+
+  const conf = readFileSync(file, 'utf8');
+  assert.match(conf, /^allow 10\.66\.66\.0\/24;$/m);
+  assert.match(conf, /^deny all;$/m);
+});
+
 // --- Развёртывание одной командой ---
 
 test('bootstrap передаёт аргументы в deploy.sh без изменений', () => {

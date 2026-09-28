@@ -203,7 +203,19 @@ sudo bash deploy/deploy.sh --add-subnet 10.8.0.0/24
 ```
 
 `--allow-subnet` задаёт список целиком (сети, которых нет во флагах, доступ
-потеряют), `--add-subnet` дописывает к уже разрешённым. Кто допущен сейчас —
+потеряют), `--add-subnet` дописывает к уже разрешённым.
+
+Можно вообще не вести свой список, а следовать за правилами соседней панели:
+
+```bash
+sudo bash deploy/deploy.sh --follow-ozon-access
+```
+
+Тогда в файл правил панели пишется одна строка
+`include /etc/nginx/snippets/ozon-pack-access.conf;` — какие сети разрешены у
+Ozon Pack, такие и у панели, менять их нужно в одном месте. Решение сохраняется
+в `.env`, обновление без флагов его не отменяет. Вернуть свой список:
+`--allow-subnet <сеть>`. Кто допущен сейчас —
 видно в `/etc/nginx/snippets/anex-orders-access.conf`; с какого адреса пришёл
 отказ — в журнале nginx: `grep 'access forbidden' /var/log/nginx/error.log`.
 
