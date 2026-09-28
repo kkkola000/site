@@ -549,7 +549,7 @@ attach_to_site() {
     die "не понял, в какой сайт встраивать панель. Укажите домен (--domain seller.anex-online.kz) или файл (--attach-site /путь/к/конфигу) из списка выше"
   fi
 
-  [[ -n "$BASE_PATH" ]] || die "нужен путь: --base-path /anex-orders"
+  [[ -n "$BASE_PATH" ]] || die "нужен путь: --base-path /delivery-orders"
   write_access_snippet
 
   # Plesk: свои директивы кладём в отдельный файл домена, чужой конфиг не трогаем.

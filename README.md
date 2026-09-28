@@ -51,7 +51,7 @@
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kkkola000/site/claude/nifty-sagan-m384gm/deploy/bootstrap.sh \
-  | sudo bash -s -- --port 3010 --base-path /anex-orders --attach-site auto --allow-subnet 10.66.66.0/24
+  | sudo bash -s -- --port 3010 --base-path /delivery-orders --attach-site auto --allow-subnet 10.66.66.0/24
 ```
 
 Токен API указывать не нужно — он вводится в самой панели: **⚙ Настройки → Токен API → Сохранить**.
@@ -77,7 +77,7 @@ curl -fsSL https://raw.githubusercontent.com/kkkola000/site/claude/nifty-sagan-m
 
 | Способ | Команда | Адрес |
 |---|---|---|
-| Путём в существующем сайте | `--base-path /anex-orders --attach-site auto` | `https://seller.anex-online.kz/anex-orders/` |
+| Путём в существующем сайте | `--base-path /delivery-orders --attach-site auto` | `https://seller.anex-online.kz/delivery-orders/` |
 | Отдельный поддомен | `--nginx --domain orders.anex-online.kz` | `https://orders.anex-online.kz/` |
 | Без nginx, по адресу в туннеле | `--bind 10.66.66.1` | `http://10.66.66.1:3010/` |
 
@@ -86,7 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/kkkola000/site/claude/nifty-sagan-m
 
 **Про `--attach-site`.** Скрипт читает действующую конфигурацию через `nginx -T`
 и находит нужный файл: по домену (`--domain`), иначе по `proxy_pass` на порт соседней
-панели. Дальше добавляет блок `location /anex-orders/` между маркерами, делает
+панели. Дальше добавляет блок `location /delivery-orders/` между маркерами, делает
 резервную копию, проверяет `nginx -t` и откатывает файл, если проверка не прошла.
 Повторный запуск не плодит дубли, `--detach-site` убирает блок.
 
@@ -117,8 +117,8 @@ git clone <репозиторий> /tmp/anex-orders && cd /tmp/anex-orders
 # Панель как отдельный сервис на порту 3010
 sudo bash deploy/deploy.sh --token 'y2_...' --port 3010
 
-# Либо подпутём внутри существующего домена (seller.anex-online.kz/orders)
-sudo bash deploy/deploy.sh --token 'y2_...' --port 3010 --base-path /orders
+# Либо подпутём внутри существующего домена (seller.anex-online.kz/delivery-orders)
+sudo bash deploy/deploy.sh --token 'y2_...' --port 3010 --base-path /delivery-orders
 ```
 
 Скрипт:
@@ -140,8 +140,8 @@ sudo bash deploy/deploy.sh --token 'y2_...' --port 3010 --base-path /orders
 Панель слушает `127.0.0.1`, наружу её отдаёт nginx. Для подпути:
 
 ```nginx
-location /orders/ {
-    proxy_pass http://127.0.0.1:3010/orders/;
+location /delivery-orders/ {
+    proxy_pass http://127.0.0.1:3010/delivery-orders/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
@@ -149,7 +149,7 @@ location /orders/ {
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_read_timeout 120s;
 }
-location = /orders { return 301 /orders/; }
+location = /delivery-orders { return 301 /delivery-orders/; }
 ```
 
 Для отдельного поддомена — шаблон в `deploy/nginx.conf`.
@@ -174,7 +174,7 @@ location = /orders { return 301 /orders/; }
 из `/opt/ozon-pack/.env` и останавливается, если совпали порт, каталог, служба,
 пользователь или домен.
 
-**Чего делать нельзя:** добавлять `location /orders/` в сайт nginx панели Ozon Pack.
+**Чего делать нельзя:** добавлять `location /delivery-orders/` в сайт nginx панели Ozon Pack.
 Её скрипт `deploy/ssl.sh` пересоздаёт этот файл целиком при каждом запуске
 (в шапке файла так и написано: «Правки перезапишутся при повторном запуске»),
 поэтому вставленный блок исчезнет при следующем обновлении или перевыпуске
