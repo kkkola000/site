@@ -16,6 +16,7 @@ OZON_DIR="/opt/ozon-pack"
 OZON_SNIPPET="/etc/nginx/snippets/ozon-pack-access.conf"
 ACCESS_SNIPPET="/etc/nginx/snippets/anex-orders-access.conf"
 ALLOW_SUBNETS=""
+ADD_SUBNETS=""
 ATTACH_SITE=""      # auto | путь к файлу сайта nginx
 DETACH_SITE=0
 MARK_BEGIN="# >>> anex-orders: панель заказов (добавлено deploy.sh) >>>"
@@ -60,8 +61,12 @@ usage() {
   --auth-user <имя>     Логин для входа в панель (по умолчанию ${AUTH_USER}).
   --auth-password <..>  Пароль панели. Если не задан — будет сгенерирован.
   --allow-subnet <сеть> Кому открыт доступ через nginx, например 10.66.66.0/24.
-                        Можно указать несколько раз. Если не задано — берётся
-                        список из соседней панели Ozon Pack (VPN-подсеть).
+                        Можно указать несколько раз. Задаёт список целиком:
+                        сети, которых нет во флагах, доступ потеряют.
+                        Если не задано — берётся сохранённый список, иначе
+                        сети соседней панели Ozon Pack (VPN-подсеть).
+  --add-subnet <сеть>   Дописать сеть или адрес к уже разрешённым, не перечисляя
+                        остальные: --add-subnet 10.8.0.0/24, --add-subnet 1.2.3.4
   --bind <адрес>        Слушать этот адрес напрямую, без nginx. Например
                         --bind 10.66.66.1 — вход по http://10.66.66.1:ПОРТ
   --attach-site auto    Добавить путь в уже работающий сайт nginx: панель
@@ -95,6 +100,7 @@ while [[ $# -gt 0 ]]; do
     --auth-user) AUTH_USER="${2:-}"; shift 2 ;;
     --auth-password) AUTH_PASSWORD="${2:-}"; shift 2 ;;
     --allow-subnet) ALLOW_SUBNETS="${ALLOW_SUBNETS:+$ALLOW_SUBNETS,}${2:-}"; shift 2 ;;
+    --add-subnet) ADD_SUBNETS="${ADD_SUBNETS:+$ADD_SUBNETS,}${2:-}"; shift 2 ;;
     --bind) BIND_HOST="${2:-}"; BIND_SET=1; shift 2 ;;
     --attach-site) ATTACH_SITE="${2:-auto}"; shift 2 ;;
     --detach-site) DETACH_SITE=1; shift ;;
@@ -372,6 +378,8 @@ write_access_snippet() {
     list="$(read_env "$DIR/.env" ALLOW_SUBNETS)"
   fi
   [[ -n "$list" ]] || list="$(neighbour_allowlist)"
+  # --add-subnet дописывает сеть к уже разрешённым, остальные перечислять не надо.
+  [[ -n "$ADD_SUBNETS" ]] && list="${list:+$list,}$ADD_SUBNETS"
 
   # Нормализуем и отбрасываем мусор: в nginx попадает только проверенное.
   local normalized="" item
@@ -380,6 +388,8 @@ write_access_snippet() {
     case "$item" in 127.0.0.1|::1|all) continue ;; esac
     if net="$(normalize_cidr "$item")"; then
       [[ "$net" != "$item" ]] && info_normalized="${info_normalized:+$info_normalized, }${item} → ${net}"
+      # Повтор в allow не ошибка, но в снипете он только мешает читать.
+      case ",$normalized," in *",$net,"*) continue ;; esac
       normalized="${normalized:+$normalized,}$net"
     else
       warn "не разобрал сеть «${item}» — пропускаю"

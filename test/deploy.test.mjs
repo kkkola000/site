@@ -166,6 +166,34 @@ test('список сетей сохраняется и переживает п�
   assert.match(conf, /^deny all;$/m);
 });
 
+test('--add-subnet дописывает сеть к сохранённым, не теряя прежние', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'snippet-'));
+  const file = join(dir, 'access.conf');
+  writeFileSync(join(dir, '.env'), 'PORT=3010\nALLOW_SUBNETS=10.66.66.0/24\n');
+
+  runBash(
+    `ACCESS_SNIPPET="${file}"; DIR="${dir}"; RUN_USER="$(id -un)"; ADD_SUBNETS="10.8.0.0/24,10.66.66.5"; write_access_snippet`,
+  );
+
+  const conf = readFileSync(file, 'utf8');
+  assert.match(conf, /^allow 10\.66\.66\.0\/24;$/m, 'прежняя сеть должна остаться');
+  assert.match(conf, /^allow 10\.8\.0\.0\/24;$/m, 'новая сеть должна добавиться');
+  assert.match(conf, /^allow 10\.66\.66\.5\/32;$/m, 'отдельный адрес добавляется как /32');
+  assert.match(conf, /^deny all;$/m);
+  // Обновлённый список сохраняется, повторный запуск без флагов его не потеряет.
+  assert.match(readFileSync(join(dir, '.env'), 'utf8'), /^ALLOW_SUBNETS=10\.66\.66\.0\/24,10\.8\.0\.0\/24,10\.66\.66\.5\/32$/m);
+});
+
+test('повтор сети в списке не даёт дубля в снипете', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'snippet-'));
+  const file = join(dir, 'access.conf');
+  writeFileSync(join(dir, '.env'), 'PORT=3010\nALLOW_SUBNETS=10.66.66.0/24\n');
+
+  runBash(`ACCESS_SNIPPET="${file}"; DIR="${dir}"; RUN_USER="$(id -un)"; ADD_SUBNETS="10.66.66.7/24"; write_access_snippet`);
+  const lines = readFileSync(file, 'utf8').split('\n').filter((line) => line === 'allow 10.66.66.0/24;');
+  assert.equal(lines.length, 1);
+});
+
 // --- Развёртывание одной командой ---
 
 test('bootstrap передаёт аргументы в deploy.sh без изменений', () => {
